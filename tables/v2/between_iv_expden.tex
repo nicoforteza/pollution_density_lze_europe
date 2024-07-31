@@ -1,0 +1,36 @@
+
+\begin{table}[htbp]
+   \caption{\label{tab:iv_bet_expden} Between Cities PM2.5 Exposure IV Estimates with Experienced Density}
+   \centering
+   \small
+   \begin{tabular}{lccc}
+      \tabularnewline \midrule \midrule
+      Model:                                & (1)           & (2)           & (3)\\  
+      \midrule
+      \emph{Variables}\\
+      Log(Exp. Density)                     & 0.053$^{***}$ & 0.069$^{***}$ & 0.061$^{*}$\\   
+                                            & (0.004)       & (0.003)       & (0.036)\\   
+      Weather                               & Yes           & Yes           & Yes\\  
+      Geological                            & Yes           & Yes           & Yes\\  
+      Water                                 & Yes           & Yes           & Yes\\  
+      Power Plants                          & Yes           & Yes           & Yes\\  
+      \midrule
+      \emph{Fixed-effects}\\
+      Country-Year, Country and Year        & Yes           & Yes           & Yes\\  
+      \midrule
+      \emph{Fit statistics}\\
+      Observations                          & 12,180        & 12,135        & 12,180\\  
+      Adjusted R$^2$                        & 0.836         & 0.832         & 0.835\\  
+      F-test (1st stage), Log(Exp. Density) & 98.4          & 3,802.9       & 16.4\\  
+      Wu-Hausman                            & 3.41          & 173.8         & 0.452\\  
+      Sargan                                & 685.6         & 751.2         & 264.8\\  
+      \midrule \midrule
+      \multicolumn{4}{l}{\emph{Clustered (Country-Year) standard-errors in parentheses}}\\
+      \multicolumn{4}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
+   \end{tabular}
+   
+   \par \raggedright 
+   Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country-year) standard-errors in parentheses. Fixed Effects: Country-year, country and year. Temporal coverage: 2007-2021. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom.
+\end{table}
+
+
