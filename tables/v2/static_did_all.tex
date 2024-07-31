@@ -1,0 +1,39 @@
+
+\begin{table}[htbp]
+   \caption{\label{tab:did_all} Treatment Effect of Urban Access Regulation on PM2.5 Exposure}
+   \centering
+   \small
+   \begin{tabular}{lcc}
+      \tabularnewline \midrule \midrule
+      Model:                           & (1)          & (2)\\  
+      \midrule
+      \emph{Variables}\\
+      treat                            & -0.027$^{*}$ & -0.033$^{**}$\\   
+                                       & (0.015)      & (0.014)\\   
+      Weather                          & Yes          & Yes\\  
+      Geological                       & Yes          & Yes\\  
+      Water                            & Yes          & Yes\\  
+      Power Plants                     & Yes          & Yes\\  
+      \midrule
+      \emph{Fixed-effects}\\
+      country-year                     & Yes          & Yes\\  
+      country                          & Yes          & Yes\\  
+      year                             & Yes          & Yes\\  
+      \midrule
+      \emph{Fit statistics}\\
+      Observations                     & 9,660        & 9,660\\  
+      Adjusted R$^2$                   & 0.788        & 0.792\\  
+      F-test (1st stage), log_pop_ras  & 9,630.7      & \\  
+      F-test (1st stage), log_dens_exp &              & 3,596.2\\  
+      Wu-Hausman                       & 77.5         & 120.0\\  
+      Sargan                           & 1,088.8      & 885.3\\  
+      \midrule \midrule
+      \multicolumn{3}{l}{\emph{Clustered (country-year) standard-errors in parentheses}}\\
+      \multicolumn{3}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
+   \end{tabular}
+   
+   \par \raggedright 
+   Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country-year) standard-errors in parentheses. Fixed Effects: Country-year, country and year. Temporal coverage: 2007-2021. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom.
+\end{table}
+
+
