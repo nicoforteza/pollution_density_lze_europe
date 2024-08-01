@@ -1,0 +1,36 @@
+
+\begin{table}[htbp]
+   \caption{Within Cities PM2.5 Exposure IV Estimates with Population Counts}
+   \centering
+   \small
+   \begin{tabular}{lccc}
+      \tabularnewline \midrule \midrule
+      Model:                          & (1)           & (2)           & (3)\\  
+      \midrule
+      \emph{Variables}\\
+      log\_pop\_ras                   & 0.344$^{***}$ & 0.153$^{***}$ & 0.579$^{***}$\\   
+                                      & (0.021)       & (0.005)       & (0.028)\\   
+      Weather                         & Yes           & Yes           & Yes\\  
+      Geological                      & Yes           & Yes           & Yes\\  
+      Water                           & Yes           & Yes           & Yes\\  
+      Power Plants                    & Yes           & Yes           & Yes\\  
+      \midrule
+      \emph{Fixed-effects}\\
+      country-year, country and year  & Yes           & Yes           & Yes\\  
+      \midrule
+      \emph{Fit statistics}\\
+      Observations                    & 47,851,465    & 47,851,465    & 47,851,465\\  
+      R$^2$                           & -0.762        & 0.225         & -3.42\\  
+      F-test (1st stage), log_pop_ras & 22,423.2      & 835,332.9     & 136,782.9\\  
+      Wu-Hausman                      & 180,780.0     & 496,197.7     & 5,024,779.0\\  
+      Sargan                          & 239,050.1     & 207,875.3     & 301,652.6\\  
+      \midrule \midrule
+      \multicolumn{4}{l}{\emph{Clustered (country-year) standard-errors in parentheses}}\\
+      \multicolumn{4}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
+   \end{tabular}
+   
+   \par \raggedright 
+   Fixed Effects: Country-year, country and year
+\end{table}
+
+
