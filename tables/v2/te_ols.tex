@@ -1,0 +1,29 @@
+
+\begin{table}[htbp]
+   \caption{\label{tab:te} Treatment Effect Estimates}
+   \centering
+   \small
+   \begin{tabular}{lcccc}
+      \tabularnewline \midrule \midrule
+                   & City with 5Km Buffer & City Cells    & Treated City Cells with 5Km Buffer & Treated City Cells \\   
+                   & (1)                  & (2)           & (3)                                & (4)\\  
+      LEZ          & 0.003                & 0.020$^{**}$  & 0.017                              & 0.024$^{**}$\\   
+                   & (0.009)              & (0.009)       & (0.010)                            & (0.009)\\   
+      Log(Pop.)    & 0.029$^{***}$        & 0.013$^{***}$ & 0.022$^{***}$                      & 0.010$^{***}$\\   
+                   & (0.003)              & (0.002)       & (0.003)                            & (0.002)\\   
+      Fixed Effects\\
+      Country      & Yes                  & Yes           & Yes                                & Yes\\  
+      Year         & Yes                  & Yes           & Yes                                & Yes\\  
+      id           & Yes                  & Yes           & Yes                                & Yes\\  
+      \midrule 
+      Observations & 3,181,966            & 768,368       & 561,993                            & 218,789\\  
+      \midrule \midrule
+      \multicolumn{5}{l}{\emph{Clustered (Country \& Year \& id) standard-errors in parentheses}}\\
+      \multicolumn{5}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
+   \end{tabular}
+   
+   \par \raggedright 
+   Temporal coverage: 2007-2021. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Malta, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland, United Kingdom
+\end{table}
+
+

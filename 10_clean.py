@@ -30,7 +30,7 @@ def read_and_clean_within_lze(year):
     df = pd.read_parquet(os.path.join(within_path.format(year), "within_lze.pqt"))#.dropna().assign(year=year)
     df = df[df.city_buffer > 0]
     cities = get_cities(year)
-    lzes = gpd.read_file(r"data/uar/uar_data.geojson")
+    lzes = gpd.read_file(r"data/uar/uar_data_new_euro.geojson")
     aux = pd.merge(cities.drop('geometry', axis=1),
                    lzes.drop(['geometry', 'id_uar'], axis=1).drop_duplicates(subset='id'),
                    on='id', how='left')

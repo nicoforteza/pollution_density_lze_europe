@@ -140,8 +140,8 @@ if __name__ == '__main__':
         print("=== Doing buffers")
         cities = get_cities(year).rename(columns={'year': 'city_ref_year'})
         cities_buffer = cities.copy()
-        cities_buffer['geometry'] = cities_buffer.buffer(25e3)
-        lzes = gpd.read_file(r"data/uar/uar_data.geojson")# .to_crs(3035)
+        cities_buffer['geometry'] = cities_buffer.buffer(10e3)
+        lzes = gpd.read_file(r"data/uar/uar_data_new_euro.geojson")# .to_crs(3035)
         lzes["geometry"] = lzes.geometry.apply(del_to_poly)
 
         # population

@@ -1,4 +1,4 @@
-setwd("/Users/nicoforteza/Desktop/tfm")
+setwd(dirname(rstudioapi::getSourceEditorContext()$path))
 library(tidyverse)
 library(fixest)
 library(arrow)
@@ -68,12 +68,12 @@ setFixest_dict(
   "country-year"="Country-Year",
   "country"="Country",
   "year"="Year",
-  "lze"= "LZE",
-  "lze_0_1"="LZE between 0-1 km.",
-  "lze_1_3"="LZE between 1-3 km.",
-  "lze_3_5"="LZE between 3-5 km.",
-  "lze_5_10"="LZE between 5-10 km.",
-  "lze_10_25"="LZE between 10-25 km.",
+  "lze"= "LEZ",
+  "lze_0_1"="LEZ between 0-1 km.",
+  "lze_1_3"="LEZ between 1-3 km.",
+  "lze_3_5"="LEZ between 3-5 km.",
+  "lze_5_10"="LEZ between 5-10 km.",
+  "lze_10_25"="LEZ between 10-25 km.",
 )
 
 style = style.tex(
@@ -91,7 +91,8 @@ vcov_arg = conley(2, distance='triangular')
 
 # descriptive ######################## 
 
-## tables ######
+## 10 km buffer ####
+
 db = df %>% 
   mutate(country=factor(country)) %>% 
   select(-c(country_id)) %>% 
@@ -107,12 +108,16 @@ db = df %>%
          `Power Plant` = pw_dist,
   )
 
-caption_desc_bt = "Descriptive Statistics (with 5km Buffer)"
+caption_desc_bt = "Descriptive Statistics (with 10km Buffer)"
 
 datasummary(All(db) ~ (Mean + SD),
-            data = db, caption=caption_desc_bt,
-            sparse_header = TRUE, output='tables/desc_all.tex', notes=notes_all_countries)
+            data = db, 
+            caption=caption_desc_bt,
+            sparse_header = TRUE, 
+            output='tables/v2/descriptive_within_lze_all.tex', 
+            notes=notes_all_countries)
 
+## cities cells - no buffer ####
 
 db = df %>% 
   mutate(country=factor(country)) %>% 
@@ -133,8 +138,13 @@ db = df %>%
 caption_desc_bt = "Descriptive Statistics of Cities Cells"
 
 datasummary(All(db) ~ (Mean + SD),
-            data = db, caption=caption_desc_bt,
-            sparse_header = TRUE, output='tables/desc_cities.tex',  notes=notes_all_countries)
+            data = db, 
+            caption=caption_desc_bt,
+            sparse_header = TRUE, 
+            output='tables/v2/descriptive_within_cities.tex',  
+            notes=notes_all_countries)
+
+## heterogeneity table ####
 
 bind_rows(
   df_cities %>% 
@@ -169,8 +179,13 @@ bind_rows(
       `Std.`=sd(Cells)
     )
 ) %>% 
-  kable(format='latex', digits=2, label='tab:cell_desc') %>% 
-  save_kable(file="tables/desc_cells.tex")
+  kable(
+    format='latex', 
+    digits=2, 
+    label='tab:cell_desc') %>% 
+  save_kable(
+    file="tables/v2/descriptive_within_n_cells.tex"
+    )
 
 aux = df_cities %>% 
   filter(id %in% treated_ids) %>% 
@@ -190,9 +205,9 @@ aux2 = aux %>%
   select(id, yeartreat) %>% 
   unique() %>% 
   arrange(id) %>% 
-  rename(`LZE Year`=yeartreat)
+  rename(`LEZ Year`=yeartreat)
 sf_use_s2(FALSE)
-aux5 = st_read("data/uar/uar_data_new.geojson") %>% 
+aux5 = st_read("data/uar/uar_data_new_euro.geojson") %>% 
   st_convex_hull()
 st_crs(aux5)
 aux5 = aux5 %>% 
@@ -231,34 +246,100 @@ auxfin = left_join(
   aux5, by=by
 )  %>% 
   arrange(city_name) %>% 
-  select(id, city_name, `LZE Year`, `Min. Observed Year`, `Max. Observed Year`, city_area, lze_area) %>% 
+  select(id, city_name, `LEZ Year`, `Min. Observed Year`, `Max. Observed Year`, city_area, lze_area) %>% 
   mutate(
     rel_share=(lze_area/city_area)*100,
     city_name=str_to_title(city_name)
-    ) 
-
-good_lezs = auxfin %>% filter(rel_share < 100) %>% select(id) %>% as_vector()
-
-auxfin %>% 
-  select(-id) %>% 
+    ) %>% 
   rename(
     `City Area (km2)`=city_area, 
     `City Name`=city_name,
-    `LZE Area (km2)`=lze_area,
-    `LZE Land Share (%)`=rel_share
-    ) %>% 
-  as_tibble() %>% 
+    `LEZ Area (km2)`=lze_area,
+    `LEZ Land Share (%)`=rel_share
+  )
+
+between_sample = read_parquet("data/between/cities_clean.pqt") %>% 
+  select(!c("__index_level_0__")) %>% 
+  filter(country_id != "MT")
+
+by = join_by(id)
+
+auxfin = left_join(
+  auxfin, 
+  between_sample %>% filter(year == 2015) %>% select(id, log_exp_w, log_pop_ras, log_dens_exp), 
+by=by) %>% 
+  mutate(
+    `Exposure Quartile`=as.factor(
+      case_when(
+        log_exp_w < as.numeric(quantile(log_exp_w, 0.25)) ~ "Q1",
+        as.numeric(quantile(log_exp_w, 0.25)) <= log_exp_w & log_exp_w < as.numeric(quantile(log_exp_w, 0.5)) ~ "Q2",
+        as.numeric(quantile(log_exp_w, 0.5)) <= log_exp_w & log_exp_w < as.numeric(quantile(log_exp_w, 0.75)) ~ "Q3",
+        as.numeric(quantile(log_exp_w, 0.75)) <= log_exp_w & log_exp_w <= as.numeric(quantile(log_exp_w, 1)) ~ "Q4"
+      )
+    ),
+    `Density Quartile`=case_when(
+        log_pop_ras < as.numeric(quantile(log_pop_ras, 0.25)) ~ "Q1",
+        as.numeric(quantile(log_pop_ras, 0.25)) <= log_pop_ras & log_pop_ras < as.numeric(quantile(log_pop_ras, 0.5)) ~ "Q2",
+        as.numeric(quantile(log_pop_ras, 0.5)) <= log_pop_ras & log_pop_ras < as.numeric(quantile(log_pop_ras, 0.75)) ~ "Q3",
+        as.numeric(quantile(log_pop_ras, 0.75)) <= log_pop_ras & log_pop_ras <= as.numeric(quantile(log_pop_ras, 1)) ~ "Q4"
+    ),
+    `Exp. Density Quartile`=case_when(
+        log_dens_exp < as.numeric(quantile(log_dens_exp, 0.25)) ~ "Q1",
+        as.numeric(quantile(log_dens_exp, 0.25)) <= log_dens_exp & log_dens_exp < as.numeric(quantile(log_dens_exp, 0.5)) ~ "Q2",
+        as.numeric(quantile(log_dens_exp, 0.5)) <= log_dens_exp & log_dens_exp < as.numeric(quantile(log_dens_exp, 0.75)) ~ "Q3",
+        as.numeric(quantile(log_dens_exp, 0.75)) <= log_dens_exp & log_dens_exp <= as.numeric(quantile(log_dens_exp, 1)) ~ "Q4"
+    )
+  ) %>% 
+  select(-log_pop_ras, -log_exp_w, -log_dens_exp)
+
+aux = st_read("data/uar/uar_data_new_euro.geojson") %>% 
+  select(id, type, schedule, contains("EUR")) %>% 
+  st_drop_geometry() %>% 
+  rename(Type=type, Schedule=schedule)
+
+by = join_by(id)
+
+auxfin = left_join(auxfin, aux %>% distinct()) %>% 
+  arrange(desc(id)) %>% 
+  mutate(lzesize=`LEZ Land Share (%)`) %>% 
+  mutate(
+    lzesize_decile = case_when(
+      lzesize < as.numeric(quantile(lzesize, 0.1)) ~ "D1",
+      as.numeric(quantile(lzesize, 0.1)) <= lzesize & lzesize < as.numeric(quantile(lzesize, 0.2)) ~ "D2",
+      as.numeric(quantile(lzesize, 0.2)) <= lzesize & lzesize < as.numeric(quantile(lzesize, 0.3)) ~ "D3",
+      as.numeric(quantile(lzesize, 0.3)) <= lzesize & lzesize < as.numeric(quantile(lzesize, 0.4)) ~ "D4",
+      as.numeric(quantile(lzesize, 0.4)) <= lzesize & lzesize < as.numeric(quantile(lzesize, 0.5)) ~ "D5",
+      as.numeric(quantile(lzesize, 0.5)) <= lzesize & lzesize < as.numeric(quantile(lzesize, 0.6)) ~ "D6",
+      as.numeric(quantile(lzesize, 0.6)) <= lzesize & lzesize < as.numeric(quantile(lzesize, 0.7)) ~ "D7",
+      as.numeric(quantile(lzesize, 0.7)) <= lzesize & lzesize < as.numeric(quantile(lzesize, 0.8)) ~ "D8",
+      as.numeric(quantile(lzesize, 0.8)) <= lzesize & lzesize < as.numeric(quantile(lzesize, 0.9)) ~ "D9",
+      as.numeric(quantile(lzesize, 0.9)) <= lzesize & lzesize < as.numeric(quantile(lzesize, 1)) ~ "D10"
+    )
+  ) %>% 
+  rename(
+    `LEZ Size Decile`=lzesize_decile
+  )
+
+auxfin %>% 
+  select(-id) %>% 
+  arrange(`City Name`) %>% 
   kable(format='latex', digits=2, label='tab:lze_desc') %>% 
-  save_kable(file="tables/lze_desc.tex")
+  save_kable(
+    file="tables/v2/descriptive_within_lezs.tex"
+    )
 
 
 # regressions ######################## 
 
 ## ols ####
 
-ols1 = feols(log_pol ~  log_pop, data=df_cities, vcov = vcov_arg)
-ols2 = feols(log_pol ~  log_pop + ..c2, data=df_cities, vcov = vcov_arg)
-ols3 = feols(log_pol ~  log_pop + ..c2 | ..fe, data=df_cities, vcov = vcov_arg)
+# good_lezs = auxfin %>% filter(rel_share < 100) %>% select(id) %>% as_vector()
+
+ols1 = feols(log_pol ~  log_pop, data=df_cities)
+ols2 = feols(log_pol ~  log_pop + ..c2, data=df_cities)
+ols3 = feols(log_pol ~  log_pop + ..c2 | ..fe, data=df_cities)
+
+etable(ols1, ols2, ols3)
 
 etable(
   ols1, ols2, ols3,
@@ -275,7 +356,7 @@ etable(
   tex = T,
   style.tex = style,
   digits.stats=3,
-  file="tables/ols1.tex",
+  file="tables/v2/within_lez_ols.tex",
   label = 'tab:ols1',
   notes=notes_all_countries,
   replace=T
@@ -283,7 +364,15 @@ etable(
 
 ## iv ####
 
-iv_01 = feols(log_pol ~ ..c2 | ..fe | log_pop ~ ..hist, df_cities, vcov = vcov_arg)
+df_cities = df_cities %>% 
+  rename(
+    sum_hist1800=hist1800,
+    sum_hist1500=hist1500,
+    sum_hist1000=hist1000,
+    sum_hist100=hist100
+  )
+
+iv_01 = feols(log_pol ~ ..c2 | ..fe | log_pop ~ ..hist_between, df_cities, vcov = vcov_arg)
 iv_02 = feols(log_pol ~ ..c2 | ..fe | log_pop ~ ..soil, df_cities, vcov = vcov_arg)
 iv_03 = feols(log_pol ~ ..c2 | ..fe | log_pop ~ ..aquif, df_cities, vcov = vcov_arg)
 
@@ -292,7 +381,7 @@ etable(
   fitstat=c('n', 'f', 'wh', 'sargan'),
   digits=3,
   headers = c("Historical Population", "Soil", "Aquifers"),
-  title='2SLS Estimates',
+  title='IV Estimates For Cities Grid Cells and Spatially Robust Standard Errors',
   depvar=F,
   se.below = T,
   drop=c("mean_temp", "mean_prec", "mean_wind", "lat", 
@@ -302,24 +391,241 @@ etable(
   tex = T,
   style.tex = style,
   digits.stats=3,
-  file="tables/iv1.tex",
-  label = 'tab:iv1',
+  file="tables/v2/within_lez_iv_all_conley.tex",
+  label = 'tab:within_lez_iv_all_conley',
   notes=notes_all_countries,
   replace=T
 )
 
-# treatment #####
+iv_01 = feols(log_pol ~ ..c2 | ..fe | log_pop ~ ..hist_between, df_cities)
+iv_02 = feols(log_pol ~ ..c2 | ..fe | log_pop ~ ..soil, df_cities)
+iv_03 = feols(log_pol ~ ..c2 | ..fe | log_pop ~ ..aquif, df_cities)
 
-m1 = feols(log_pol ~ lze + ..c2 + log_pop | country + year, vcov=conley(2), data=df)
-m2 = feols(log_pol ~ lze + ..c2 + log_pop | country + year, vcov=conley(2), data=df %>% filter(city==1))
-m3 = feols(log_pol ~ lze + ..c2 + log_pop | country + year, vcov=conley(2), data=df %>% filter(id %in% treated_ids))
-m4 = feols(log_pol ~ lze + ..c2 + log_pop | country + year, vcov=conley(2), data=df %>% filter(id %in% treated_ids & city==1))
+etable(
+  iv_01, iv_02, iv_03,
+  fitstat=c('n', 'f', 'wh', 'sargan'),
+  digits=3,
+  headers = c("Historical Population", "Soil", "Aquifers"),
+  title='IV Estimates For Cities Grid Cells',
+  depvar=F,
+  se.below = T,
+  drop=c("mean_temp", "mean_prec", "mean_wind", "lat", 
+         "mean_ruggedness", "coast_city", "water_dist", 
+         "coast_dist", "pw_dist", 'area', 'Constant'),
+  fontsize='small',
+  tex = T,
+  style.tex = style,
+  digits.stats=3,
+  file="tables/v2/within_lez_iv_all.tex",
+  label = 'tab:within_lez_iv_all',
+  notes=notes_all_countries,
+  replace=T
+)
+
+
+## treatment ####
+
+# df = df %>% mutate(log_pol=log(pol), log_pop=log(pop))
+
+df = df %>% 
+  rename(
+    mean_prec=mean_precip,
+    sum_hist1800=hist1800,
+    sum_hist1500=hist1500,
+    sum_hist1000=hist1000,
+    sum_hist100=hist100
+    )
+
+m1 = feols(log_pol ~ lze + log_pop + ..c2 | country + year, data=df, cluster = ~ country + year)
+m2 = feols(log_pol ~ lze + log_pop + ..c2 | country + year, data=df %>% filter(city==1), cluster = ~ country + year)
+m3 = feols(log_pol ~ lze + log_pop + ..c2 | country + year, data=df %>% filter(id %in% treated_ids), cluster = ~ country + year)
+m4 = feols(log_pol ~ lze + log_pop + ..c2 | country + year, data=df %>% filter(id %in% treated_ids & city==1), cluster = ~ country + year)
+
 
 etable(
   m1, m2, m3, m4,
   fitstat=c('n'),
   digits=3,
-  headers = c("City with 5Km Buffer", "City Cells", "Treated City Cells with 5Km Buffer", "Treated City Cells"),
+  headers = c("City with 10Km Buffer", "City Cells", "Treated City Cells with 10Km Buffer", "Treated City Cells"),
+  title='Treatment Effect Estimates',
+  depvar=F,
+  se.below = T,
+  drop=c("mean_temp", "mean_prec", "mean_wind", "lat", 
+         "mean_ruggedness", "coast_city", "water_dist", 
+         "coast_dist", "pw_dist", 'area', 'Constant', 'Log(Pop.)'),
+  fontsize='small',
+  tex = T,
+  style.tex = style,
+  digits.stats=3,
+  file="tables/v2/te_ols.tex",
+  label = 'tab:te',
+  notes=notes_all_countries,
+  replace=T
+)
+
+m1 = feols(log_pol ~ lze + log_pop + ..c2 | country + year, data=df, vcov=vcov_arg)
+m2 = feols(log_pol ~ lze + log_pop + ..c2 | country + year, data=df %>% filter(city==1), vcov=vcov_arg)
+m3 = feols(log_pol ~ lze + log_pop + ..c2 | country + year, data=df %>% filter(id %in% treated_ids), vcov=vcov_arg)
+m4 = feols(log_pol ~ lze + log_pop + ..c2 | country + year, data=df %>% filter(id %in% treated_ids & city==1), vcov=vcov_arg)
+
+
+etable(
+  m1, m2, m3, m4,
+  fitstat=c('n'),
+  digits=3,
+  headers = c("City with 10Km Buffer", "City Cells", "Treated City Cells with 10Km Buffer", "Treated City Cells"),
+  title='Treatment Effect Estimates with Spatially Autocorrelated Errors',
+  depvar=F,
+  se.below = T,
+  drop=c("mean_temp", "mean_prec", "mean_wind", "lat", 
+         "mean_ruggedness", "coast_city", "water_dist", 
+         "coast_dist", "pw_dist", 'area', 'Constant', 'Log(Pop.)'),
+  fontsize='small',
+  tex = T,
+  style.tex = style,
+  digits.stats=3,
+  file="tables/v2/te_ols_conley.tex",
+  label = 'tab:te_conley',
+  notes=notes_all_countries,
+  replace=T
+)
+
+m1 = feols(log_pol ~ ..lze_t + ..c2 + log_pop | country + year, vcov=vcov_arg, data=df)
+m2 = feols(log_pol ~ ..lze_t + ..c2 + log_pop | country + year, vcov=vcov_arg, data=df %>% filter(city==1))
+m3 = feols(log_pol ~ ..lze_t + ..c2 + log_pop | country + year, vcov=vcov_arg, data=df %>% filter(id %in% treated_ids))
+m4 = feols(log_pol ~ ..lze_t + ..c2 + log_pop | country + year, vcov=vcov_arg, data=df %>% filter(id %in% treated_ids & city==1))
+
+etable(
+  m1, m2, m3, m4,
+  fitstat=c('n'),
+  digits=3,
+  headers = c("City with 10Km Buffer", "City Cells", "Treated City Cells with 10Km Buffer", "Treated City Cells"),
+  title='Treatment Effect Estimates with Spatial Spillovers',
+  depvar=F,
+  se.below = T,
+  drop=c("mean_temp", "mean_prec", "mean_wind", "lat", 
+         "mean_ruggedness", "coast_city", "water_dist", 
+         "coast_dist", "pw_dist", 'area', 'Constant', 'Log(Pop.)'),
+  fontsize='small',
+  tex = T,
+  style.tex = style,
+  digits.stats=3,
+  file="tables/v2/te_spillovers_conley.tex",
+  label = 'tab:te_spillovers_conley',
+  notes=notes_all_countries,
+  replace=T
+)
+
+m1 = feols(log_pol ~ ..lze_t + ..c2 + log_pop | country + year, cluster = ~ country + year, data=df)
+m2 = feols(log_pol ~ ..lze_t + ..c2 + log_pop | country + year, cluster = ~ country + year, data=df %>% filter(city==1))
+m3 = feols(log_pol ~ ..lze_t + ..c2 + log_pop | country + year, cluster = ~ country + year, data=df %>% filter(id %in% treated_ids))
+m4 = feols(log_pol ~ ..lze_t + ..c2 + log_pop | country + year, cluster = ~ country + year, data=df %>% filter(id %in% treated_ids & city==1))
+
+etable(
+  m1, m2, m3, m4,
+  fitstat=c('n'),
+  digits=3,
+  headers = c("City with 10Km Buffer", "City Cells", "Treated City Cells with 10Km Buffer", "Treated City Cells"),
+  title='Treatment Effect Estimates with Spatial Spillovers',
+  depvar=F,
+  se.below = T,
+  drop=c("mean_temp", "mean_prec", "mean_wind", "lat", 
+         "mean_ruggedness", "coast_city", "water_dist", 
+         "coast_dist", "pw_dist", 'area', 'Constant', 'Log(Pop.)'),
+  fontsize='small',
+  tex = T,
+  style.tex = style,
+  digits.stats=3,
+  file="tables/v2/te_spillovers.tex",
+  label = 'tab:te_spillovers',
+  notes=notes_all_countries,
+  replace=T
+)
+
+## heterogeneity #####
+
+hetdf = df %>% filter(id %in% treated_ids & city==1 & yeartreat >= 2007 & yeartreat <= 2021)
+by = join_by(id)
+hetdf = left_join(hetdf, auxfin, by=by)
+
+tyears = seq(-5, 5, 1)
+
+vector = c("lze", "lze_0_1", "lze_1_3", "lze_3_5", "lze_5_10", "lze_10_25")
+
+# 86 Madrid, 281 Paris, 386 Londres
+
+hetdf %>% 
+  # filter(`Density Quartile`=="Q2") %>% 
+  filter(timetotreat %in% tyears) %>% 
+  select(vector, timetotreat, pop, pol) %>% 
+  gather("Type", "Implemented", lze:lze_10_25) %>% 
+  group_by(Type, Implemented, timetotreat) %>% 
+  summarise(avg=weighted.mean(pol, pop)) %>% 
+  mutate(
+    Implemented=factor(Implemented),
+    Type=case_when(
+      Type == 'lze' ~ "LEZ",
+      Type == 'lze_0_1' ~ "1km Spillover",
+      Type == 'lze_1_3' ~ "1-3km Spillover",
+      Type == 'lze_3_5' ~ "3-5km Spillover",
+      Type == 'lze_5_10' ~ "5-10km Spillover",
+      Type == 'lze_10_25' ~ "10-25km Spillover",
+    )
+  ) %>% 
+  rename("Affected Cells"=Implemented) %>% 
+  ggplot(aes(x=timetotreat, y=avg, color=`Affected Cells`))+
+  geom_line() + 
+  theme_bw() + 
+  geom_vline(xintercept=0, linetype="dashed", alpha=.4) +
+  facet_wrap(~factor(Type, 
+                     levels=c("LEZ", "1km Spillover", "1-3km Spillover", 
+                              "3-5km Spillover", "5-10km Spillover", "10-25km Spillover"))) + 
+  ylab("PM2.5 Weighted Exposure") +
+  xlab("Time to LEZ Implementation")+
+  ggtitle("All Grid Cells inside Treated Cities")+
+  theme(text=element_text(family="Palatino"))
+
+m5 = feols(log_pol ~ ..lze_t + ..c2 + log_pop | country + year + id, 
+           vcov=vcov_arg, #cluster=~country + year + id,
+           data=hetdf, #%>% filter(!(id %in% c(281, 318, 86, 184))), 
+           split = ~ `Exp. Density Quartile`)
+
+etable(
+  m5,
+  fitstat=c('n', "r2", "ar2"),
+  digits=3,
+  # headers = c("City with 10Km Buffer", "City Cells", "Treated City Cells with 10Km Buffer", "Treated City Cells"),
+  title='Treatment Effect Estimates with Spatial Spillovers and Exposure Quartile',
+  depvar=F,
+  se.below = T,
+  drop=c("mean_temp", "mean_prec", "mean_wind", "lat", 
+         "mean_ruggedness", "coast_city", "water_dist", 
+         "coast_dist", "pw_dist", 'area', 'Constant', 'Log(Pop.)', 'log_pop'),
+  fontsize='small',
+  tex = T,
+  style.tex = style,
+  digits.stats=3,
+  # file="tables/v2/te_spillovers.tex",
+  # label = 'tab:te_spillovers',
+  notes=notes_all_countries,
+  replace=T
+)
+
+
+# DOCUMENTO V0
+
+# treatment #####
+
+m1 = feols(log_pol ~ lze + ..c2 + log_pop | country + year, vcov=vcov_arg, data=df)
+m2 = feols(log_pol ~ lze + ..c2 + log_pop | country + year, vcov=vcov_arg, data=df %>% filter(city==1))
+m3 = feols(log_pol ~ lze + ..c2 + log_pop | country + year, vcov=vcov_arg, data=df %>% filter(id %in% treated_ids))
+m4 = feols(log_pol ~ lze + ..c2 + log_pop | country + year, vcov=vcov_arg, data=df %>% filter(id %in% treated_ids & city==1))
+
+etable(
+  m1, m2, m3, m4,
+  fitstat=c('n'),
+  digits=3,
+  headers = c("City with 10Km Buffer", "City Cells", "Treated City Cells with 10Km Buffer", "Treated City Cells"),
   title='Treatment Effect Estimates',
   depvar=F,
   se.below = T,
@@ -336,10 +642,10 @@ etable(
   replace=T
 )
 
-m1 = feols(log_pol ~ ..lze_t + ..c2 + log_pop | country + year, vcov=conley(2), data=df)
-m2 = feols(log_pol ~ ..lze_t + ..c2 + log_pop | country + year, vcov=conley(2), data=df %>% filter(city==1))
-m3 = feols(log_pol ~ ..lze_t + ..c2 + log_pop | country + year, vcov=conley(2), data=df %>% filter(id %in% treated_ids))
-m4 = feols(log_pol ~ ..lze_t + ..c2 + log_pop | country + year, vcov=conley(2), data=df %>% filter(id %in% treated_ids & city==1))
+m1 = feols(log_pol ~ ..lze_t + ..c2 + log_pop | country + year, vcov=vcov_arg, data=df)
+m2 = feols(log_pol ~ ..lze_t + ..c2 + log_pop | country + year, vcov=vcov_arg, data=df %>% filter(city==1))
+m3 = feols(log_pol ~ ..lze_t + ..c2 + log_pop | country + year, vcov=vcov_arg, data=df %>% filter(id %in% treated_ids))
+m4 = feols(log_pol ~ ..lze_t + ..c2 + log_pop | country + year, vcov=vcov_arg, data=df %>% filter(id %in% treated_ids & city==1))
 
 etable(
   m1, m2, m3, m4,
@@ -362,6 +668,7 @@ etable(
   replace=T
 )
 
+## heterogeneity ######
 
 # playground #######
 
@@ -430,7 +737,7 @@ tc %>%
   mutate(
     Implemented=factor(Implemented),
     Type=case_when(
-      Type == 'lze' ~ "LZE",
+      Type == 'lze' ~ "LEZ",
       Type == 'lze_0_1' ~ "1km Spillover",
       Type == 'lze_1_3' ~ "1-3km Spillover",
       Type == 'lze_3_5' ~ "3-5km Spillover",
@@ -444,10 +751,10 @@ tc %>%
   theme_bw() + 
   geom_vline(xintercept=0, linetype="dashed", alpha=.4) +
   facet_wrap(~factor(Type, 
-                     levels=c("LZE", "1km Spillover", "1-3km Spillover", 
+                     levels=c("LEZ", "1km Spillover", "1-3km Spillover", 
                               "3-5km Spillover", "5-10km Spillover", "10-25km Spillover"))) + 
   ylab("PM2.5 Weighted Exposure") +
-  xlab("Time to LZE Implementation")+
+  xlab("Time to LEZ Implementation")+
   ggtitle("All Grid Cells inside Treated Cities")+
   theme(text=element_text(family="Palatino"))
 
@@ -544,7 +851,7 @@ m6 = feols(log_pol ~ i(timetotreat, lze_10_25, ref = -1) + ..c2 |..fe,
 library(ggfixest)
 ggiplot(
   list(
-    "LZE"=m1,
+    "LEZ"=m1,
     "0-1km"=m2, 
     "1-3km"=m3, 
     "3-5km"=m4, 

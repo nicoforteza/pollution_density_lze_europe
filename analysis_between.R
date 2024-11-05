@@ -1,4 +1,4 @@
-setwd("/Users/nicoforteza/Desktop/tfm")
+setwd(dirname(rstudioapi::getSourceEditorContext()$path))
 
 library(tidyverse)
 library(fixest)

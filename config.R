@@ -7,8 +7,6 @@ setFixest_fml(..c1 = ~ mean_temp + mean_prec + mean_wind,
               ..water = ~ coast_city + water_dist,
               ..pw = ~ pw_dist,
               
-              
-              
               ..fe = ~ country ^ year + country + year,
               ..fe_country = ~ country,
               ..fe_year = ~ year,
