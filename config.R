@@ -39,5 +39,5 @@ setFixest_fml(..c1 = ~ mean_temp + mean_prec + mean_wind,
               ..soil_work = ~ nutrient_work_1 + nutrient_work_2 + nutrient_work_3 + 
                 nutrient_work_4 + nutrient_work_5,
               
-              ..lze_t = ~ lze + lze_0_1 + lze_1_3 + lze_3_5 + lze_5_10 + lze_10_25
+              ..lze_t = ~ lze + lze_0_1 + lze_1_3 + lze_3_5 + lze_5_10
 )

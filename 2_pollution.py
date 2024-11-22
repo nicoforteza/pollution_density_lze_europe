@@ -15,3 +15,4 @@ for path in paths:
     pol.rio.write_nodata(0, inplace=True)
     pol = pol.rio.clip(eur.geometry)
     pol.rio.to_raster(clean_path.format(year))
+    print(pol.shape)

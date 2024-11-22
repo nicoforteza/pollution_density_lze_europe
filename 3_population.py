@@ -2,7 +2,7 @@ import rioxarray
 import numpy as np
 from config import *
 
-years = range(2007, 2022)
+years = range(2007, 2023)
 raw_path = r"data/population/{}/landscan-global-{}-assets/landscan-global-{}.tif"
 pol_path = r"data/pollution/{}/pol.tif"
 clean_path = r"data/population/{}/pop.tif"
@@ -30,5 +30,6 @@ for year in years:
     clipped_pop.rio.write_nodata(0, inplace=True)
     clipped_pop.values = clipped_pop.values.astype(np.dtype('float32'))
     clipped_pop.rio.to_raster(clean_path.format(year))
+    print(clipped_pop.shape)
     del pop, clipped_pop
 

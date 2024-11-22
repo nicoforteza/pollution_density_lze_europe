@@ -6,7 +6,7 @@ from rasterio.enums import Resampling
 eur = get_europe()
 eurproj = eur.to_crs(4326)
 variables = ['prec', 'wind', 'temp']  # 'temp',
-years = range(2007, 2022)
+years = range(2007, 2023)
 clean_path = r"data/controls/climate/{}_{}.tif"
 
 
