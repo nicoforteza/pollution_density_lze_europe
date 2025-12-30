@@ -13,205 +13,145 @@ library(gdata)
 
 source("config.R")
 
-df = read_parquet("data/within/within_clean_lze.pqt.gzip") %>% 
-  select(!c("__index_level_0__")) #%>% 
-# filter(country_id != "MT")
+# drop water cells ####
+df = read_parquet("data/within/lez.pqt.gzip")
 
 codes = df %>% select(country_id) %>% unique() %>% as_vector()
 paises = countrycode(codes, "iso2c", "country.name")
-paises[8] = "United Kingdom"
-paises[33] = 'Greece'
+paises[3] = "United Kingdom"
+# paises[32] = "United Kingdom"
 
 df = right_join(df, tibble(country_id=codes, country=paises), 
                 by="country_id") %>% 
   mutate(country=as.factor(country))
 
-df = df |> 
-  st_as_sf(coords = c("long", "lat"), crs="EPSG:3035")
-st_crs(df)
-df = df %>% st_transform("EPSG:4326")
-coords = df %>% 
-  st_coordinates() %>% 
-  as.tibble() %>% 
-  rename(lon=X, lat=Y)
-df$lon = coords$lon
-df$lat = coords$lat
-
 df = df %>% 
-  select(-geometry) %>% 
-  mutate(log_pol = log(pol), 
-         log_pop=log(pop),
-         water_dist = replace(water_dist, water_dist == -1, 0),
-         coast_city = replace(coast_city, coast_city == -1, 0),
-         lze_0_1 = as.integer(!lze & lze_1km == 1),
-         lze_1_3 = as.integer(!lze & lze_3km == 1 & !lze_0_1),
-         lze_3_5 = as.integer(!lze & lze_5km == 1 & !lze_0_1 & !lze_1_3),
-         lze_5_10 = as.integer(!lze & lze_10km == 1 & !lze_0_1 & !lze_1_3 & !lze_3_5),
-         outside_city = ifelse(id < 0, 1, 0),
-         city = ifelse(id > 0, 1, 0)
-  ) 
+  mutate(log_pol = log(pol + 0.00001), 
+         log_pop = log(pop + 0.00001),
+         log_lez_d = log(km_to_lez + 0.000001),
+         lez_0_1 = as.integer(km_to_lez > 0 & km_to_lez <= 1),
+         lez_1_3 = as.integer(km_to_lez > 1 & km_to_lez <= 3),
+         lez_3_5 = as.integer(km_to_lez > 3 & km_to_lez <= 5),
+         lez_not_spill = as.integer(km_to_lez > 5),
+         post = case_when(
+           timetotreat > 0 ~ 1,
+           T ~ 0
+         )
+  ) %>% 
+  rename(
+    mean_prec=prec,
+    mean_temp=temp,
+    mean_wind=wind
+  )
 
-treated_ids = df %>% 
-  filter(lze==1 & id > 0) %>% 
-  select(id) %>% 
-  st_drop_geometry() %>% 
-  unique() %>% 
-  deframe()
+gc()
 
-df_cities = df %>% 
-  filter(city==1)
 
-df_cities_treated = df_cities %>% 
-  filter(id %in% treated_ids)
+# other characteristics ####
+# quartile of area, quartile of area w.r.t. cities with lez, lez area quartile
 
-aux = df_cities %>% 
-  filter(id %in% treated_ids) %>% 
-  as_tibble() %>% 
-  select(-geometry) %>% 
-  select(id, timetotreat, year, yeartreat) %>% 
-  unique()
+# df %>% select(id_city, area) %>% distinct() %>% drop_na() %>% 
 
-aux1 = aux %>% 
-  group_by(id) %>% 
+lez_size_rel = df %>% 
+  filter((id_city > 0 | id_lez > 0) & year == 2020 & is_city == 1) %>% 
+  group_by(id_lez, id_city) %>% 
   summarise(
-    `Min. Observed Year`=min(timetotreat),
-    `Max. Observed Year`=max(timetotreat),
-  )
+    area=n()
+  ) %>% 
+  mutate(
+    is_lez=ifelse(id_lez > 0, 1, 0)
+  ) %>% 
+  group_by(id_city, is_lez) %>% 
+  summarise(
+    lez_size=sum(area)
+  ) %>% 
+  pivot_wider(
+    names_from = is_lez,
+    values_from = lez_size
+  ) %>% 
+  mutate(
+    `1`=replace_na(`1`, 0),
+    total_size = `1` + `0`,
+    lez_size_rel=`1` / total_size
+  ) %>% 
+  filter(lez_size_rel > 0)
 
-aux2 = aux %>% 
-  select(id, yeartreat) %>% 
-  unique() %>% 
-  arrange(id) %>% 
-  rename(`LEZ Year`=yeartreat)
-sf_use_s2(FALSE)
-aux5 = st_read("data/uar/uar_data_new_euro.geojson") %>% 
-  st_convex_hull()
-st_crs(aux5)
-aux5 = aux5 %>% 
-  st_transform("EPSG:4326") %>% 
-  mutate(lze_area=as.vector(aux5 %>% st_area() / 1e6)) %>% 
-  select(city, lze_area, id) %>% 
-  rename(city_name=city) %>% 
-  as_tibble() %>% 
-  select(-geometry)
+quantiles <- quantile(lez_size_rel$lez_size_rel, probs = c(0.25, 0.5, 0.75, 1))
 
+lez_size_rel <- lez_size_rel %>%
+  mutate(
+    lez_size_rel = case_when(
+      lez_size_rel < quantiles[1] ~ "Q1",
+      lez_size_rel < quantiles[2] ~ "Q2",
+      lez_size_rel < quantiles[3] ~ "Q3",
+      TRUE ~ "Q4" 
+    )
+  ) %>% 
+  select(id_city, lez_size_rel)
 
-aux6 = st_read("data/cities/2020/clean/cities.geojson") %>% 
-  st_transform("EPSG:4326") 
-aux6 = aux6 %>% 
-  mutate(city_area=as.vector(aux6 %>% st_area() / 1e6)) %>% 
-  as_tibble() %>% 
-  select(-geometry) %>% 
-  select(id, city_area)
+df %>% 
+  filter(year == 2020 & id_city > 0) %>% 
+  group_by(id_city) %>% 
+  summarise(area=n()) %>% 
+  arrange(desc(area))
 
-aux = merge(aux5, aux6)
+area_quart = df %>%# select(id_city, area) %>% distinct() %>% drop_na() %>% 
+  filter(year == 2020 & id_city > 0 & id_city %in% lez_size_rel$id_city) %>% 
+  group_by(id_city) %>% 
+  summarise(area=n()) %>% 
+  arrange(desc(area)) %>% 
+  mutate(
+    area_quart=case_when(
+      area < as.numeric(quantile(area, 0.25)) ~ "Q1",
+      as.numeric(quantile(area, 0.25)) <= area & area < as.numeric(quantile(area, 0.5)) ~ "Q2",
+      as.numeric(quantile(area, 0.5)) <= area & area < as.numeric(quantile(area, 0.75)) ~ "Q3",
+      as.numeric(quantile(area, 0.75)) <= area & area <= as.numeric(quantile(area, 1)) ~ "Q4"
+    ) 
+  ) %>% 
+  select(id_city, area_quart)
 
-lze_area = aux %>% 
-  group_by(id) %>% 
-  summarise(lze_area=sum(lze_area))
+data_counts <- df %>%
+  filter(year == 2020 & id_lez > 0) %>%
+  group_by(id_lez) %>%
+  count() %>%
+  rename(ncount = n)
 
-city_area = aux %>% 
-  group_by(id) %>% 
-  summarise(city_area=mean(city_area))
+quantiles <- quantile(data_counts$ncount, probs = c(0.25, 0.5, 0.75, 1))
 
-by = join_by(id)
-auxfin = left_join(
+lez_size_quart <- data_counts %>%
+  mutate(
+    lez_size_quart = case_when(
+      ncount < quantiles[1] ~ "Q1",
+      ncount < quantiles[2] ~ "Q2",
+      ncount < quantiles[3] ~ "Q3",
+      TRUE ~ "Q4" 
+    )
+  ) %>% 
+  select(id_lez_5km=id_lez, lez_area=ncount, lez_size_quart)
+
+df = df %>% left_join(
+  area_quart
+) %>% 
   left_join(
-    left_join(aux1, aux2, by=by),
-    aux6, by=by
-  ),
-  aux5, by=by
-)  %>% 
-  arrange(city_name) %>% 
-  select(id, city_name, `LEZ Year`, `Min. Observed Year`, `Max. Observed Year`, city_area, lze_area) %>% 
-  mutate(
-    rel_share=(lze_area/city_area)*100,
-    city_name=str_to_title(city_name)
-  ) %>% 
-  rename(
-    `City Area (km2)`=city_area, 
-    `City Name`=city_name,
-    `LEZ Area (km2)`=lze_area,
-    `LEZ Land Share (%)`=rel_share
+    lez_size_rel
   )
 
-between_sample = read_parquet("data/between/cities_clean.pqt") %>% 
-  select(!c("__index_level_0__")) %>% 
-  filter(country_id != "MT")
-
-by = join_by(id)
-
-auxfin = left_join(
-  auxfin, 
-  between_sample %>% filter(year == 2015) %>% select(id, log_exp_w, log_pop_ras, log_dens_exp), 
-  by=by) %>% 
+df = df %>% left_join(
+  lez_size_quart
+) %>% 
   mutate(
-    `Exposure Quartile`=as.factor(
-      case_when(
-        log_exp_w < as.numeric(quantile(log_exp_w, 0.25)) ~ "Q1",
-        as.numeric(quantile(log_exp_w, 0.25)) <= log_exp_w & log_exp_w < as.numeric(quantile(log_exp_w, 0.5)) ~ "Q2",
-        as.numeric(quantile(log_exp_w, 0.5)) <= log_exp_w & log_exp_w < as.numeric(quantile(log_exp_w, 0.75)) ~ "Q3",
-        as.numeric(quantile(log_exp_w, 0.75)) <= log_exp_w & log_exp_w <= as.numeric(quantile(log_exp_w, 1)) ~ "Q4"
-      )
-    ),
-    `Density Quartile`=case_when(
-      log_pop_ras < as.numeric(quantile(log_pop_ras, 0.25)) ~ "Q1",
-      as.numeric(quantile(log_pop_ras, 0.25)) <= log_pop_ras & log_pop_ras < as.numeric(quantile(log_pop_ras, 0.5)) ~ "Q2",
-      as.numeric(quantile(log_pop_ras, 0.5)) <= log_pop_ras & log_pop_ras < as.numeric(quantile(log_pop_ras, 0.75)) ~ "Q3",
-      as.numeric(quantile(log_pop_ras, 0.75)) <= log_pop_ras & log_pop_ras <= as.numeric(quantile(log_pop_ras, 1)) ~ "Q4"
-    ),
-    `Exp. Density Quartile`=case_when(
-      log_dens_exp < as.numeric(quantile(log_dens_exp, 0.25)) ~ "Q1",
-      as.numeric(quantile(log_dens_exp, 0.25)) <= log_dens_exp & log_dens_exp < as.numeric(quantile(log_dens_exp, 0.5)) ~ "Q2",
-      as.numeric(quantile(log_dens_exp, 0.5)) <= log_dens_exp & log_dens_exp < as.numeric(quantile(log_dens_exp, 0.75)) ~ "Q3",
-      as.numeric(quantile(log_dens_exp, 0.75)) <= log_dens_exp & log_dens_exp <= as.numeric(quantile(log_dens_exp, 1)) ~ "Q4"
-    )
+    area_quart=replace_na(area_quart, "Outside City"),
+    lez_size_rel=replace_na(lez_size_rel, "Outside City")
   ) %>% 
-  select(-log_pop_ras, -log_exp_w, -log_dens_exp) %>% 
-  filter(id %in% treated_ids)
-
-
-aux = st_read("data/uar/uar_data_new_euro.geojson") %>% 
-  select(id, type, schedule, contains("EUR")) %>% 
-  st_drop_geometry() %>% 
-  rename(Type=type, Schedule=schedule)
-
-by = join_by(id)
-
-auxfin = left_join(auxfin, aux %>% distinct()) %>% 
-  arrange(desc(id)) %>% 
-  mutate(lzesize=`LEZ Land Share (%)`) 
-
-auxfin = auxfin %>% drop_na()
-
-auxfin = auxfin %>% 
-  mutate(
-    lzesize_decile = case_when(
-      lzesize < as.numeric(quantile(lzesize, 0.25)) ~ "Q1",
-      as.numeric(quantile(lzesize, 0.25)) <= lzesize & lzesize < as.numeric(quantile(lzesize, 0.5)) ~ "Q2",
-      as.numeric(quantile(lzesize, 0.5)) <= lzesize & lzesize < as.numeric(quantile(lzesize, 0.75)) ~ "Q3",
-      as.numeric(quantile(lzesize, 0.75)) <= lzesize & lzesize <= as.numeric(quantile(lzesize, 1)) ~ "Q4"
-    )
-  ) %>% 
-  rename(
-    `LEZ Size Quartile`=lzesize_decile
+  left_join(
+    df %>% select(city_name, id_lez_5km) %>% distinct() %>% group_by(city_name) %>% summarise(n_lezs=n())
   )
 
-table = auxfin
+df = df %>% left_join(
+  df %>% select(city_name, id_lez_5km) %>% distinct() %>% group_by(city_name) %>% summarise(n_lezs=n())
+)
 
-df_cities_treated = df_cities_treated %>% 
-  rename(
-    mean_prec=mean_precip,
-    sum_hist1800=hist1800,
-    sum_hist1500=hist1500,
-    sum_hist1000=hist1000,
-    sum_hist100=hist100
-  )
+keep(df, theme_aux, sure=T)
 
-
-vcov_arg = conley(2, distance='triangular')
-
-
-keep(table, df_cities_treated, vcov_arg, sure=T)
 gc()
 

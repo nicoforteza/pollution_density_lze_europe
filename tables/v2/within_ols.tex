@@ -3,24 +3,27 @@
    \caption{Within OLS Estimates for Population Density}
    \centering
    \small
-   \begin{tabular}{lccc}
+   \begin{tabular}{lcccccc}
       \tabularnewline \midrule \midrule
-      Model:         & (1)          & (2)          & (3)\\  
+      is\_city          & Full sample             & 1             & Full sample             & 1             & Full sample   & 1 \\   
+      Model:            & (1)                     & (2)           & (3)                     & (4)           & (5)           & (6)\\  
       \midrule
       \emph{Variables}\\
-      Constant       & 2.17$^{***}$ & 3.32$^{***}$ &   \\   
-                     & (0.0001)     & (0.0006)     &   \\   
+      Constant          & 2.35$^{***}$            & 2.44$^{***}$  & 4.47$^{***}$            & 5.65$^{***}$  &               &   \\   
+                        & (0.0002)                & (0.001)       & (0.002)                 & (0.007)       &               &   \\   
+      Log (Population)  & 0.033$^{***}$           & 0.022$^{***}$ & 0.046$^{***}$           & 0.020$^{***}$ & 0.044$^{***}$ & 0.021$^{***}$\\   
+                        & ($4.51\times 10^{-5}$)  & (0.0002)      & ($4.16\times 10^{-5}$)  & (0.0002)      & (0.001)       & (0.0008)\\   
       \midrule
       \emph{Fixed-effects}\\
-      country-year   &              &              & Yes\\  
-      country        &              &              & Yes\\  
-      year           &              &              & Yes\\  
+      country\_id-year  &                         &               &                         &               & Yes           & Yes\\  
+      country\_id       &                         &               &                         &               & Yes           & Yes\\  
+      year              &                         &               &                         &               & Yes           & Yes\\  
       \midrule
       \emph{Fit statistics}\\
-      Observations   & 47,851,465   & 47,851,465   & 47,851,465\\  
-      Adjusted R$^2$ & 0.061        & 0.221        & 0.324\\  
+      Observations      & 18,417,179              & 1,091,775     & 18,417,179              & 1,091,775     & 18,417,179    & 1,091,775\\  
+      Adjusted R$^2$    & 0.028                   & 0.010         & 0.204                   & 0.321         & 0.764         & 0.816\\  
       \midrule \midrule
-      \multicolumn{4}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
+      \multicolumn{7}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
    \end{tabular}
 \end{table}
 

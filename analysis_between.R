@@ -14,22 +14,21 @@ library(hdm)
 
 source("config.R")
 
-df = read_parquet("data/between/cities_clean.pqt") %>% 
-  select(!c("__index_level_0__")) %>% 
-  filter(country_id != "MT")
+df = read_parquet("data/between/cities_clean_v2.pqt") %>% 
+  select(!c("__index_level_0__"))
 
 
 codes = df %>% select(country_id) %>% unique() %>% as_vector()
 paises = countrycode(codes, "iso2c", "country.name")
 paises[1] = "Greece"
-paises[10] = 'United Kingdom'
+paises[11] = 'United Kingdom'
 
 df = right_join(df, tibble(country_id=codes, country=paises), 
                 by="country_id") %>% 
   mutate(country=as.factor(country))
 
 require(foreign)
-write.dta(df, "data/cities_clean.dta")
+write.dta(df, "data/cities_clean_v2.dta")
 
 
 ## Descriptive statistics #######
@@ -74,6 +73,10 @@ db1 = df %>%
 
 caption_desc_bt = "Descriptive Statistics of Between Cities Sample"
 
+datasummary(All(db) ~ (Mean + SD),
+            data = db1, caption=caption_desc_bt,
+            sparse_header = TRUE, output='latex')
+
 datasummary(All(db1) ~ (Mean + SD),
             data = db1, caption=caption_desc_bt,
             sparse_header = TRUE, output='latex')
@@ -91,7 +94,7 @@ aux = rbind(
 by <- join_by(Variable)
 final_desc_between = left_join(merged, aux, by)
 
-notes = "Notes: Yearly (2007-2021) averages and standard deviation for Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary,
+notes = "Notes: Yearly (2007-2022) averages and standard deviation for Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary,
 Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia,
 Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom. Population and experienced density is expressed in millions of persons, temperature in Celsius degrees, precipitation in millimiters per day, wind speed in meters per second (in thousands) at a 10 meter height above the surface, and all distance variables are expressed in kilometers (km)."
 
@@ -178,15 +181,17 @@ writeLines(desc_bet_iv_2, 'tables/v2/descriptive_between_iv_2.tex')
 setFixest_dict(
   c(
     log_pop_ras = "Log (Population)",
-    log_dens_exp="Log(Exp. Density)",
+    log_dens_exp="Log (Exp. Density)",
     country="Country",
-    year="Year"
+    year="Year",
+    fit_log_pop_ras="Log (Population)"
   )
 )
 
 ols1 = feols(log_exp_w ~ sw(log_pop_ras, log_dens_exp) , data=df)
 ols2 = feols(log_exp_w ~ sw(log_pop_ras, log_dens_exp) + ..c2, data=df)
-ols3 = feols(log_exp_w ~ sw(log_pop_ras, log_dens_exp) + ..c2 | ..fe, data=df)
+ols3 = feols(log_exp_w ~ sw(log_pop_ras, log_dens_exp) + ..c2 | ..fe, data=df, cluster = ~ year + country)
+
 
 etable(
   ols1, ols2, ols3,
@@ -195,15 +200,14 @@ etable(
   title='Between OLS Estimates for PM2.5 Exposure',
   depvar=F,
   se.below = T,
-  drop=c("mean_temp", "mean_prec", "mean_wind", "lat", 
-         "mean_ruggedness", "coast_city", "water_dist", 
-         "coast_dist", "pw_dist", 'area'),
+  # keep=c(log_pop_ras),
+  drop=c("mean_temp", "mean_prec", "mean_wind", "mean_ruggedness", "coast_city", "water_dist", "Constant", "pw_dist"),
   fontsize='small',
   tex = T,
   digits.stats=3,
   label='tab:ols_between',
   file = "tables/v2/between_ols.tex",
-  notes="Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country-year) standard-errors in parentheses. Fixed Effects: Country-year, country and year. Temporal coverage: 2007-2021. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom.",
+  notes="Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country and year) standard-errors in parentheses. Fixed Effects: Country and year. Temporal coverage: 2007-2022. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom.",
   replace = T
 )
 
@@ -211,9 +215,9 @@ etable(
 
 # pop normal appendix
 
-iv_02 = feols(log_exp_w ~ csw(..temp, ..geo, ..water, ..pw) | ..fe | log_pop_ras ~ ..soil, df)
-iv_03 = feols(log_exp_w ~ csw(..temp, ..geo, ..water, ..pw) | ..fe | log_pop_ras ~ ..hist, df)
-iv_04 = feols(log_exp_w ~ csw(..temp, ..geo, ..water, ..pw) | ..fe | log_pop_ras ~ ..aquif, df)
+iv_02 = feols(log_exp_w ~ csw(..temp, ..geo, ..water, ..pw) | ..fe | log_pop_ras ~ ..soil, df, cluster = ~ year + country)
+iv_03 = feols(log_exp_w ~ csw(..temp, ..geo, ..water, ..pw) | ..fe | log_pop_ras ~ ..hist, df, cluster = ~ year + country)
+iv_04 = feols(log_exp_w ~ csw(..temp, ..geo, ..water, ..pw) | ..fe | log_pop_ras ~ ..aquif, df, cluster = ~ year + country)
 
 etable(
   list("Soil Quality"=iv_02, "Historical Density"=iv_03, "Aquifers"=iv_04),
@@ -222,14 +226,12 @@ etable(
   title='Between Cities PM2.5 Exposure IV Estimates with Population Density',
   depvar=F,
   se.below = T,
-  drop=c("mean_temp", "mean_prec", "mean_wind", "lat", 
-         "mean_ruggedness", "coast_city", "water_dist", 
-         "coast_dist", "pw_dist", 'area'),
+  #drop=c("mean_temp", "mean_prec", "mean_wind", "mean_ruggedness", "coast_city", "water_dist", "Constant", "pw_dist"),
   fontsize='small',
   group=list(
     "Weather"=c("mean_temp", "mean_prec", "mean_wind"),
     "Geological"=c("lat", "mean_ruggedness"),
-    "Water"=c("coast_city", "water_dist", "coast_dist"),
+    "Water"=c("coast_city", "water_dist"),
     "Power Plants"=c("pw_dist")
     ),
   fixef.group = TRUE,
@@ -243,15 +245,15 @@ etable(
     fixef.suffix = " FE", 
     yesNo = c("Yes", 'No')
     ),
-  notes="Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country-year) standard-errors in parentheses. Fixed Effects: Country-year, country and year. Temporal coverage: 2007-2021. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom."
+  notes="Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country and year) standard-errors in parentheses. Fixed Effects: country and year. Temporal coverage: 2007-2022. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom."
 )
 
 
 # pop normal resumido
 
-iv_02 = feols(log_exp_w ~ ..c2 | ..fe | log_pop_ras ~ ..soil, df)
-iv_03 = feols(log_exp_w ~ ..c2 | ..fe | log_pop_ras ~ ..hist, df)
-iv_04 = feols(log_exp_w ~ ..c2 | ..fe | log_pop_ras ~ ..aquif, df)
+iv_02 = feols(log_exp_w ~ ..c2 | ..fe | log_pop_ras ~ ..soil, df, cluster = ~ year + country)
+iv_03 = feols(log_exp_w ~ ..c2 | ..fe | log_pop_ras ~ ..hist, df, cluster = ~ year + country)
+iv_04 = feols(log_exp_w ~ ..c2 | ..fe | log_pop_ras ~ ..aquif, df, cluster = ~ year + country)
 
 etable(
   list("Soil Quality"=iv_02, "Historical Density"=iv_03, "Aquifers"=iv_04),
@@ -281,7 +283,7 @@ etable(
     fixef.suffix = " FE", 
     yesNo = c("Yes", 'No')
   ),
-  notes="Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country-year) standard-errors in parentheses. Fixed Effects: Country-year, country and year. Temporal coverage: 2007-2021. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom."
+  notes="Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country and year) standard-errors in parentheses. Fixed Effects: country and year. Temporal coverage: 2007-2022. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom."
 )
 
 
@@ -289,9 +291,9 @@ etable(
 ## IV between models experienced density ########
 
 
-iv_02 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil, df)
-iv_03 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..hist, df)
-iv_04 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..aquif, df)
+iv_02 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil, df, cluster = ~ year + country)
+iv_03 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..hist, df, cluster = ~ year + country)
+iv_04 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..aquif, df, cluster = ~ year + country)
 
 etable(
   list("Soil Quality"=iv_02, "Historical Density"=iv_03, "Aquifers"=iv_04),
@@ -321,16 +323,50 @@ etable(
     fixef.suffix = " FE", 
     yesNo = c("Yes", 'No')
   ),
-  notes="Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country-year) standard-errors in parentheses. Fixed Effects: Country-year, country and year. Temporal coverage: 2007-2021. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom."
+  notes="Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country and year) standard-errors in parentheses. Fixed Effects: country and year. Temporal coverage: 2007-2022. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom."
 )
+
+iv_02 = feols(log_exp_w ~ csw(..temp, ..geo, ..water, ..pw) | ..fe | log_dens_exp ~ ..soil, df, cluster = ~ year + country)
+iv_03 = feols(log_exp_w ~ csw(..temp, ..geo, ..water, ..pw) | ..fe | log_dens_exp ~ ..hist, df, cluster = ~ year + country)
+iv_04 = feols(log_exp_w ~ csw(..temp, ..geo, ..water, ..pw) | ..fe | log_dens_exp ~ ..aquif, df, cluster = ~ year + country)
+
+etable(
+  list("Soil Quality"=iv_02, "Historical Density"=iv_03, "Aquifers"=iv_04),
+  fitstat=c('n', 'ar2', 'ivf1', "wh", "sargan"),
+  digits=3,
+  title='Between Cities PM2.5 Exposure IV Estimates with Experienced Density',
+  depvar=F,
+  se.below = T,
+  #drop=c("mean_temp", "mean_prec", "mean_wind", "mean_ruggedness", "coast_city", "water_dist", "Constant", "pw_dist"),
+  fontsize='small',
+  group=list(
+    "Weather"=c("mean_temp", "mean_prec", "mean_wind"),
+    "Geological"=c("lat", "mean_ruggedness"),
+    "Water"=c("coast_city", "water_dist"),
+    "Power Plants"=c("pw_dist")
+  ),
+  fixef.group = TRUE,
+  tex = T,
+  digits.stats=3,
+  label='tab:iv_bet_appendix_expden',
+  replace=T,
+  file = "tables/v2/between_iv_expden_appendix.tex",
+  style.df = style.df(
+    fixef.title = "", 
+    fixef.suffix = " FE", 
+    yesNo = c("Yes", 'No')
+  ),
+  notes="Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country and year) standard-errors in parentheses. Fixed Effects: country and year. Temporal coverage: 2007-2022. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom."
+)
+
 
 
 ## Robustness historical density ####
 
-iv_02 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ sum_hist100, df)
-iv_03 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ sum_hist1000, df)
-iv_04 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ sum_hist1500, df)
-iv_05 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ sum_hist1800, df)
+iv_02 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ sum_hist100, df, cluster = ~ year + country)
+iv_03 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ sum_hist1000, df, cluster = ~ year + country)
+iv_04 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ sum_hist1500, df, cluster = ~ year + country)
+iv_05 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ sum_hist1800, df, cluster = ~ year + country)
 
 group=list(
   "Weather"=c("mean_temp", "mean_prec", "mean_wind"),
@@ -362,18 +398,18 @@ etable(
     fixef.suffix = " FE", 
     yesNo = c("Yes", 'No')
   ),
-  notes="Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country-year) standard-errors in parentheses. Fixed Effects: Country-year, country and year. Temporal coverage: 2007-2021. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom."
+  notes="Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country and year) standard-errors in parentheses. Fixed Effects: country and year. Temporal coverage: 2007-2022. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom."
 )
 
 ## Robustness Geological Instruments ####
 
-iv_01 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_tox , df)
-iv_02 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_tox + ..soil_ret, df)
-iv_03 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_tox + ..soil_ret + ..soil_av, df)
-iv_04 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_tox + ..soil_ret + ..soil_av + ..soil_ox, df)
-iv_05 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_tox + ..soil_ret+ ..soil_av+ ..soil_ox+ ..soil_work, df)
-iv_06 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_tox + ..soil_ret+ ..soil_av+ ..soil_ox+ ..soil_work+ ..soil_root, df)
-iv_07 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil, df)
+iv_01 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_tox , df, cluster = ~ year + country)
+iv_02 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_tox + ..soil_ret, df, cluster = ~ year + country)
+iv_03 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_tox + ..soil_ret + ..soil_av, df, cluster = ~ year + country)
+iv_04 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_tox + ..soil_ret + ..soil_av + ..soil_ox, df, cluster = ~ year + country)
+iv_05 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_tox + ..soil_ret+ ..soil_av+ ..soil_ox+ ..soil_work, df, cluster = ~ year + country)
+iv_06 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_tox + ..soil_ret+ ..soil_av+ ..soil_ox+ ..soil_work+ ..soil_root, df, cluster = ~ year + country)
+iv_07 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil, df, cluster = ~ year + country)
 
 etable(
   iv_01, iv_02, iv_03, iv_04, iv_05, iv_06, iv_07,
@@ -397,16 +433,16 @@ etable(
     fixef.suffix = " FE", 
     yesNo = c("Yes", 'No')
   ),
-  notes="Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country-year) standard-errors in parentheses. Fixed Effects: Country-year, country and year. Temporal coverage: 2007-2021. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom."
+  notes="Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country and year) standard-errors in parentheses. Fixed Effects: country and year. Temporal coverage: 2007-2022. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom."
 )
 
-iv_01 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_tox , df)
-iv_02 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_ret, df)
-iv_03 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_av, df)
-iv_04 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_ox, df)
-iv_05 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_work, df)
-iv_06 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_root, df)
-iv_07 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_sa, df)
+iv_01 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_tox , df, cluster = ~ year + country)
+iv_02 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_ret, df, cluster = ~ year + country)
+iv_03 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_av, df, cluster = ~ year + country)
+iv_04 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_ox, df, cluster = ~ year + country)
+iv_05 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_work, df, cluster = ~ year + country)
+iv_06 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_root, df, cluster = ~ year + country)
+iv_07 = feols(log_exp_w ~ ..c2 | ..fe | log_dens_exp ~ ..soil_sa, df, cluster = ~ year + country)
 
 
 etable(
@@ -431,11 +467,11 @@ etable(
     fixef.suffix = " FE", 
     yesNo = c("Yes", 'No')
   ),
-  notes="Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country-year) standard-errors in parentheses. Fixed Effects: Country-year, country and year. Temporal coverage: 2007-2021. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom."
+  notes="Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country and year) standard-errors in parentheses. Fixed Effects: country and year. Temporal coverage: 2007-2022. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom."
 )
 
 # city size and more than 1 instrument
-iv_01 = feols(log_exp_w ~ ..c2 + csw0(sum_pop, sum_pop**2, sum_pop**3) | ..fe | log_dens_exp ~ ..aquif + ..hist, df)
+iv_01 = feols(log_exp_w ~ ..c2 + csw0(sum_pop, sum_pop**2, sum_pop**3) | ..fe | log_dens_exp ~ ..aquif + ..hist, df, cluster = ~ year + country)
 
 etable(
   iv_01,
@@ -459,9 +495,9 @@ etable(
     fixef.suffix = " FE", 
     yesNo = c("Yes", 'No')
   ),
-  notes="Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country-year) standard-errors in parentheses. Fixed Effects: Country-year, country and year. Temporal coverage: 2007-2021. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom."
+  notes="Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country and year) standard-errors in parentheses. Fixed Effects: country and year. Temporal coverage: 2007-2022. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom."
 )
-iv_02 = feols(log_exp_w ~ ..c2 + csw0(sum_pop, sum_pop**2, sum_pop**3) + area | ..fe | log_dens_exp ~ ..aquif + ..hist, df)
+iv_02 = feols(log_exp_w ~ ..c2 + csw0(sum_pop, sum_pop**2, sum_pop**3) + area | ..fe | log_dens_exp ~ ..aquif + ..hist, df, cluster = ~ year + country)
 etable(
   iv_02,
   fitstat=c('n', 'ar2', 'ivf1'),
@@ -484,7 +520,7 @@ etable(
     fixef.suffix = " FE", 
     yesNo = c("Yes", 'No')
   ),
-  notes="Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country-year) standard-errors in parentheses. Fixed Effects: Country-year, country and year. Temporal coverage: 2007-2021. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom."
+  notes="Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country and year) standard-errors in parentheses. Fixed Effects: country and year. Temporal coverage: 2007-2022. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom."
 )
 
 ## Visualization ####

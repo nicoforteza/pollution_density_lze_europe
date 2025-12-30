@@ -1,0 +1,35 @@
+
+\begin{table}[htbp]
+   \caption{\label{tab:twfe_spillovers_static_dist_lez} Two Way Fixed Effects Estimation of LEZ with Spillovers}
+   \centering
+   \footnotesize
+   \begin{tabular}{lcccc}
+      \tabularnewline \midrule \midrule
+      lez\_size\_rel        & Q1      & Q2      & Q3             & Q4 \\   
+      Model:                & (1)     & (2)     & (3)            & (4)\\  
+      \midrule
+      \emph{Variables}\\
+      Log(Distance)         & -0.015  & -0.002  & -0.019$^{***}$ & -0.021$^{***}$\\   
+                            & (0.010) & (0.004) & (0.005)        & (0.008)\\   
+      Log(Distance) x Post  & -0.010  & -0.0005 & 0.013$^{**}$   & 0.023$^{*}$\\   
+                            & (0.017) & (0.008) & (0.007)        & (0.013)\\   
+      Time Varying controls & Yes     & Yes     & Yes            & Yes\\  
+      \midrule
+      \emph{Fixed-effects}\\
+      Year                  & Yes     & Yes     & Yes            & Yes\\  
+      LEZ                   & Yes     & Yes     & Yes            & Yes\\  
+      City                  & Yes     & Yes     & Yes            & Yes\\  
+      \midrule
+      \emph{Fit statistics}\\
+      Observations          & 10,096  & 32,272  & 29,824         & 12,624\\  
+      Adjusted R$^2$        & 0.94610 & 0.92148 & 0.90748        & 0.77223\\  
+      \midrule \midrule
+      \multicolumn{5}{l}{\emph{Conley (3km) standard-errors in parentheses}}\\
+      \multicolumn{5}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
+   \end{tabular}
+   
+   \par \raggedright 
+   Notes: Conley (3km) standard-errors in parentheses. Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Temporal coverage: 2007-2022. Control group are grid cells farther away than 5km of the LEZ border. Interferred cells are discarded from the sample. Timy varying controls are population, temperature, wind, and precipitation variables.
+\end{table}
+
+

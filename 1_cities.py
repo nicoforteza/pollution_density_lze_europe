@@ -1,7 +1,8 @@
 import rioxarray
 from rasterio import features
 from shapely import Polygon
-
+import time
+from datetime import timedelta
 from config import *
 
 years = [2005, 2010, 2015, 2020]
@@ -13,6 +14,7 @@ clean_path = r"data/cities/{}/clean/cities.geojson"
 def construct_city(obj):
     return Polygon(obj[0]['coordinates'][0])
 
+start = time.time()
 
 for year in years:
     print("Doing for year {}".format(year))
@@ -36,3 +38,7 @@ for year in years:
             r"data/cities/{}/clean/cities.geojson".format(year)
     )
 print("Done ==== ")
+
+elapsed = (time.time() - start)
+
+print(str(timedelta(seconds=elapsed)))

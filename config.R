@@ -1,19 +1,20 @@
 setFixest_fml(..c1 = ~ mean_temp + mean_prec + mean_wind,
-              ..c2 = ~ mean_temp + mean_prec + mean_wind + lat + mean_ruggedness + 
-              pw_dist + coast_city + water_dist,
+              ..c2 = ~ mean_temp + mean_prec + mean_wind + latitude + mean_ruggedness + 
+              pw_dist + coast_dist + river_dist,
               
               ..temp = ~ mean_temp + mean_prec + mean_wind,
               ..geo = ~ lat + mean_ruggedness,
               ..water = ~ coast_city + water_dist,
               ..pw = ~ pw_dist,
               
-              ..fe = ~ country ^ year + country + year,
+              ..fe = ~ country + year,
               ..fe_country = ~ country,
               ..fe_year = ~ year,
               ..fe_country_year = ~ country ^ year,
               
               ..aquif = ~ aquif1 + aquif2 + aquif3 + aquif4 + aquif5 + aquif6,
               ..hist_between = ~ log(sum_hist1800) + log(sum_hist1500) + log(sum_hist1000) + log(sum_hist100),
+              ..hist = ~ sum_hist1800,
               ..eq = ~ mean_eqhz,
               ..soil = ~ nutrient_tox_1 + nutrient_tox_2 + nutrient_tox_3 + 
                 nutrient_tox_4 + nutrient_tox_5 + nutrient_av_1 + nutrient_av_2 + nutrient_av_3 + 
@@ -41,3 +42,17 @@ setFixest_fml(..c1 = ~ mean_temp + mean_prec + mean_wind,
               
               ..lze_t = ~ lze + lze_0_1 + lze_1_3 + lze_3_5 + lze_5_10
 )
+
+theme_aux <- theme(legend.position="bottom") +
+  theme(legend.title = element_blank(), 
+        panel.border = element_blank(),
+        axis.line = element_blank()) +
+  theme(
+    axis.line.x = element_line(color = "black"),  # Bordes del eje x
+    axis.line.y = element_line(color = "black"),  # Bordes del eje y
+    axis.line.x.top = element_line(color = "transparent"),  # Borde superior del eje x
+    axis.line.y.right = element_line(color = "transparent")  # Borde derecho del eje y
+  ) +
+  theme(
+    text = element_text(family = "Palatino")
+  )

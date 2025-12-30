@@ -1,0 +1,30 @@
+
+\begin{table}[htbp]
+   \caption{Within OLS Estimates for Population Density}
+   \centering
+   \small
+   \begin{tabular}{lcccccc}
+      \tabularnewline \midrule \midrule
+      is\_city         & Full sample   & 1             & Full sample   & 1             & Full sample   & 1 \\   
+      Model:           & (1)           & (2)           & (3)           & (4)           & (5)           & (6)\\  
+      \midrule
+      \emph{Variables}\\
+      Constant         & 2.35$^{***}$  & 2.44$^{***}$  & 4.47$^{***}$  & 5.65$^{***}$  &               &   \\   
+                       & (0.002)       & (0.011)       & (0.030)       & (0.089)       &               &   \\   
+      Log (Population) & 0.033$^{***}$ & 0.022$^{***}$ & 0.046$^{***}$ & 0.020$^{***}$ & 0.045$^{***}$ & 0.022$^{***}$\\   
+                       & (0.0005)      & (0.002)       & (0.0005)      & (0.001)       & (0.0003)      & (0.0008)\\   
+      \midrule
+      \emph{Fixed-effects}\\
+      country\_id      &               &               &               &               & Yes           & Yes\\  
+      year             &               &               &               &               & Yes           & Yes\\  
+      \midrule
+      \emph{Fit statistics}\\
+      Observations     & 18,417,179    & 1,091,775     & 18,417,179    & 1,091,775     & 18,417,179    & 1,091,775\\  
+      Adjusted R$^2$   & 0.028         & 0.010         & 0.204         & 0.321         & 0.712         & 0.771\\  
+      \midrule \midrule
+      \multicolumn{7}{l}{\emph{Conley (3km) standard-errors in parentheses}}\\
+      \multicolumn{7}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
+   \end{tabular}
+\end{table}
+
+

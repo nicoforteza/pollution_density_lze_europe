@@ -1,0 +1,35 @@
+
+\begin{table}[htbp]
+   \caption{\label{tab:iv_bet_appendix_expden} Between Cities PM2.5 Exposure IV Estimates with Experienced Density}
+   \centering
+   \small
+   \begin{tabular}{lcccccccccccc}
+      \tabularnewline \midrule \midrule
+      Model:                           & (1)           & (2)           & (3)           & (4)           & (5)           & (6)           & (7)           & (8)           & (9)     & (10)    & (11)    & (12)\\  
+      \midrule
+      \emph{Variables}\\
+      log\_dens\_exp                   & 0.052$^{***}$ & 0.055$^{***}$ & 0.055$^{***}$ & 0.055$^{***}$ & 0.062$^{***}$ & 0.063$^{***}$ & 0.063$^{***}$ & 0.063$^{***}$ & 0.033   & 0.073   & 0.085   & 0.081\\   
+                                       & (0.010)       & (0.010)       & (0.009)       & (0.009)       & (0.013)       & (0.011)       & (0.010)       & (0.010)       & (0.106) & (0.118) & (0.116) & (0.118)\\   
+      Weather                          & Yes           & Yes           & Yes           & Yes           & Yes           & Yes           & Yes           & Yes           & Yes     & Yes     & Yes     & Yes\\  
+      Geological                       &               & Yes           & Yes           & Yes           &               & Yes           & Yes           & Yes           &         & Yes     & Yes     & Yes\\  
+      Water                            &               &               & Yes           & Yes           &               &               & Yes           & Yes           &         &         & Yes     & Yes\\  
+      Power Plants                     &               &               &               & Yes           &               &               &               & Yes           &         &         &         & Yes\\  
+      \midrule
+      \emph{Fixed-effects}\\
+      country and year                 & Yes           & Yes           & Yes           & Yes           & Yes           & Yes           & Yes           & Yes           & Yes     & Yes     & Yes     & Yes\\  
+      \midrule
+      Observations                     & 13,008        & 13,008        & 13,008        & 13,008        & 13,008        & 13,008        & 13,008        & 13,008        & 13,008  & 13,008  & 13,008  & 13,008\\  
+      Adjusted R$^2$                   & 0.789         & 0.792         & 0.794         & 0.794         & 0.788         & 0.791         & 0.793         & 0.793         & 0.789   & 0.790   & 0.789   & 0.790\\  
+      F-test (1st stage), log_dens_exp & 103.4         & 103.9         & 104.2         & 104.2         & 3,155.6       & 3,158.0       & 3,180.8       & 3,178.3       & 19.0    & 18.5    & 18.4    & 18.2\\  
+      Wu-Hausman                       & 1.85          & 3.08          & 3.47          & 3.47          & 14.3          & 13.5          & 13.2          & 12.7          & 0.425   & 1.31    & 2.82    & 2.19\\  
+      Sargan                           & 667.4         & 603.1         & 581.5         & 577.7         &               &               &               &               & 258.5   & 220.5   & 221.4   & 218.5\\  
+      \midrule \midrule
+      \multicolumn{13}{l}{\emph{Clustered (year \& country) standard-errors in parentheses}}\\
+      \multicolumn{13}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
+   \end{tabular}
+   
+   \par \raggedright 
+   Notes: Signif. Codes: ***: 0.01, **: 0.05, *: 0.1. Clustered (country and year) standard-errors in parentheses. Fixed Effects: country and year. Temporal coverage: 2007-2022. Countries: Albania, Austria, Belgium, Bulgaria, Croatia, Cyprus, Czechia, Denmark, Estonia, Finland, France, Germany, Greece, Hungary, Iceland, Ireland, Italy, Latvia, Lithuania, Montenegro, Netherlands, North Macedonia, Norway, Poland, Portugal, Romania, Serbia, Slovakia, Slovenia, Spain, Sweden, Switzerland and United Kingdom.
+\end{table}
+
+

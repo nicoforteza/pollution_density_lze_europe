@@ -7,6 +7,8 @@ from xrspatial.focal import apply
 from xrspatial.utils import ngjit
 import rasterio
 import warnings
+import time
+from datetime import timedelta
 warnings.filterwarnings("ignore")
 
 eur = get_europe()
@@ -16,6 +18,8 @@ eurp = eur.to_crs(4326)
 #######################################################
 # ################ CONTROLS ###########################
 #######################################################
+
+start = time.time()
 
 for year in [2005, 2010, 2015, 2020]:
 
@@ -28,10 +32,10 @@ for year in [2005, 2010, 2015, 2020]:
     # ================= COAST LINES ================
     xmin, ymin, xmax, ymax = eurp.total_bounds
 
-    cos = gpd.read_file(r"data/controls/geographical/ne_10m_coastline/ne_10m_coastline.shp")
+    cos = gpd.read_file(r"data/controls/geographical/ne_10m_coastline/ne_10m_coastline.shp", engine='pyogrio')
     cosp = cos.cx[xmin:xmax, ymin:ymax].to_crs(3035)
 
-    wat = gpd.read_file(r"data/controls/geographical/ne_10m_rivers_europe/ne_10m_rivers_europe.shp")
+    wat = gpd.read_file(r"data/controls/geographical/ne_10m_rivers_europe/ne_10m_rivers_europe.shp", engine='pyogrio')
     wat = wat.cx[xmin:xmax, ymin:ymax].to_crs(3035)
 
     coast_city_between = vector.groupby("id").apply(
@@ -84,7 +88,7 @@ for year in [2005, 2010, 2015, 2020]:
     vector = get_cities(year)
 
     # ============= EARTHQUAKE HAZARD ==================================
-    e = gpd.read_file(r"data/instruments/earthquake/hmap491/hmap491.shp")
+    e = gpd.read_file(r"data/instruments/earthquake/hmap491/hmap491.shp", engine='pyogrio')
     er = e.to_crs(eur.crs)
     er_ras = make_geocube(vector_data=er,
                           measurements=["HPVALUE"],
@@ -165,7 +169,7 @@ for year in [2005, 2010, 2015, 2020]:
         vector = pd.merge(vector, df.reset_index().rename(columns={'index': 'id'}), on='id')
 
     # ============= AQUIFIERS ======================
-    soil = gpd.read_file(r"data/instruments/aquifers/IHME1500_v12/shp/ihme1500_aquif_ec4060_v12_poly.shp")
+    soil = gpd.read_file(r"data/instruments/aquifers/IHME1500_v12/shp/ihme1500_aquif_ec4060_v12_poly.shp", engine='pyogrio')
     soil = soil[soil.AQUIF_CODE.isin([1, 2, 3, 4, 5, 6])]
     soil["AQUIF_CODE"] = soil["AQUIF_CODE"].astype(int)
     soil = soil.to_crs(4326)
@@ -180,10 +184,12 @@ for year in [2005, 2010, 2015, 2020]:
         clipped['area'] = clipped.area / clipped.area.sum()
         # clipped['area'].drop('area', axis=1, inplace=True)
         clipped = clipped.groupby("AQUIF_CODE")["area"].sum()
+        clipped = clipped.reindex(soil.AQUIF_CODE.unique()).fillna(0)
         clipped['id'] = x.id.item()
         return clipped
 
-    soil_pct = vector.apply(lambda x: get_soil_pcts(x), axis=1).fillna(0)
+    # vector = vector.set_geometry("geometry")
+    soil_pct = vector.apply(lambda x: get_soil_pcts(x), axis=1)
     vector = pd.merge(vector, soil_pct, on='id')
     vector = vector.rename(columns=dict(zip(range(1, 7), ['aquif{}'.format(i) for i in range(1, 7)])))
     vector = vector.to_crs(3035)
@@ -194,4 +200,7 @@ for year in [2005, 2010, 2015, 2020]:
     vector.drop(['year'], axis=1).to_file(r"data/instruments/{}_clean_between.geojson".format(year))
     del vector
 
+elapsed = (time.time() - start)
+
+print(str(timedelta(seconds=elapsed)))
 

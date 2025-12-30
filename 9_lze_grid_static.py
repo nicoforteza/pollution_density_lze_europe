@@ -1,24 +1,16 @@
-import glob
 import os
 
 os.environ['USE_PYGEOS'] = '0'
-from pathlib import Path
 
 from shapely import Point
 import rioxarray
 import rasterio
-import geocube
-import functools
-import matplotlib.pyplot as plt
-
-from rasterio.enums import Resampling
+from scipy.ndimage import distance_transform_edt
 from xrspatial.utils import ngjit
-from xrspatial.convolution import custom_kernel, circle_kernel
+from xrspatial.convolution import custom_kernel
 from xrspatial.focal import apply
 from config import *
-from shapely import Polygon, MultiLineString, MultiPolygon, LineString
-from geocube.vector import vectorize
-from geocube.rasterize import rasterize_image
+import time
 
 lze_directory = r"data/uar/uars"
 ring_size = [1e3, 3e3, 5e3, 10e3]
@@ -26,31 +18,133 @@ eur = get_europe()
 eurproj = eur.to_crs(4326)
 years = range(2007, 2023) # range(2007, 2023)
 
+
+def raster_to_df(raster, colname, not_d=True):
+    data = raster.data  # Assuming single band
+    height, width = raster.data.shape
+    # Create arrays of row and col indices
+    rows, cols = np.where(~np.isnan(data))
+    # Get the coordinates for each cell
+    xs, ys = rasterio.transform.xy(raster.rio.transform(), rows, cols)
+    # Create a DataFrame with cell IDs and EPSG:3035 coordinates
+    if not not_d:
+        return pd.DataFrame({
+            'cell_id': range(len(xs)),
+            'x': xs,
+            'y': ys,
+            colname: data[rows, cols]  # Assuming your binary column is in the raster
+        })
+    else:
+        return pd.DataFrame({
+            'cell_id': range(len(xs)),
+            colname: data[rows, cols]  # Assuming your binary column is in the raster
+        }).set_index("cell_id")
+
+
 if __name__ == '__main__':
 
-    print("=====Static features over time======")
-
     year = 2020
-    print("=== Main variables to compute them")
-    pop = rioxarray.open_rasterio(r"data/population/{}/pop.tif".format(year)).sel(band=1)
-    pol = rioxarray.open_rasterio(r"data/pollution/{}/pol.tif".format(year)).sel(band=1)
-    pop = pop.rio.write_nodata(np.nan)
-    pol = pol.rio.write_nodata(np.nan)
 
+    # cities
     cities = get_cities(year).rename(columns={'year': 'city_ref_year'})
-
+    cities['geometry'] = cities.buffer(25e3)
     # population
-    cpop = pop.rio.clip(cities.geometry)
-    # pollution
-    cpol = pol.rio.clip(cities.geometry)
+    pop = rioxarray.open_rasterio(r"data/population/{}/pop.tif".format(year)).sel(band=1)
+    pop = pop.rio.write_nodata(np.nan)
+    cpop = pop.rio.clip(cities.geometry).rio.clip(eur.geometry)
 
-    print("=== Terrain variables")
-    # ruggedness
+    print("===== Instrument variables")
+
+    # soil quality
+    soils = list()
+    for n in [1, 2, 3, 4, 5, 6, 7]:
+        soil1 = rioxarray.open_rasterio(
+            r"https://www.fao.org/fileadmin/user_upload/soils/docs/HWSD/Soil_Quality_data/sq{}.asc".format(n)
+        ).sel(band=1).rio.set_crs(4326)
+        soil1.values[(soil1.values < 0) | (np.isnan(soil1))] = -1
+        soil1 = soil1.rio.write_nodata(-1).rio.set_crs(4326)
+        soil1 = soil1.rio.reproject_match(cpop, nodata=-1).rio.clip(eur.geometry)
+        soil1.values = soil1.values.astype(np.float32)
+        if n == 1:
+            name = 'av'
+        elif n == 2:
+            name = "ret"
+        elif n == 3:
+            name = "root"
+        elif n == 4:
+            name = "ox"
+        elif n == 5:
+            name = "sa"
+        elif n == 6:
+            name = "tox"
+        elif n == 7:
+            name = "work"
+        soil1df = pd.get_dummies(
+            raster_to_df(soil1, "nutrient_{}".format(name)).astype('int').astype('category')).astype('int')
+        soil1df = soil1df.iloc[:, 2:]
+        print("Soil {} shape:".format(n), soil1df.shape)
+        soils.append(soil1df)
+        time.sleep(5)
+
+    # aquifers
+    aquifv = gpd.read_file(r"data/instruments/aquifers/IHME1500_v12/shp/ihme1500_aquif_ec4060_v12_poly.shp")
+    aquifv = aquifv[aquifv.AQUIF_CODE.isin([1, 2, 3, 4, 5, 6])]
+    aquifv["AQUIF_CODE"] = aquifv["AQUIF_CODE"].astype(int)
+    aquifv = aquifv.to_crs(4326).to_crs(3035)
+    aquif = make_geocube(
+        vector_data=aquifv,
+        measurements=["AQUIF_CODE"],
+        resolution=cpop.rio.resolution(),
+        fill=-1
+    ).to_array().sel(variable='AQUIF_CODE').rio.reproject_match(cpop, nodata=-1)
+    aquif.values[(aquif.values < 0) | (np.isnan(aquif.values))] = -1
+    aquif_df = raster_to_df(aquif, "aquif")
+    aquif_df = pd.get_dummies(aquif_df.astype('int').astype('category'), prefix_sep='').astype('int')
+    print("Aquif shape:", aquif_df.shape)
+
+    # historical density
+    hist_years = [1800, 1500, 1000, 100]
+    dfh = list()
+    for hy in hist_years:
+        h = rioxarray.open_rasterio(
+            r"data/instruments/hist_dens/popc_{}AD.asc".format(hy)
+        ).sel(band=1)
+        h.values[(h.values < 0) | (np.isnan(h))] = -1
+        h.rio.write_nodata(-1, inplace=True)
+        h.rio.write_crs(4326, inplace=True)
+        ch1 = h.rio.reproject_match(cpop,
+                                    nodata=-1,
+                                    resampling=rasterio.enums.Resampling(1)
+                                    ).rio.clip(eur.geometry)
+        ch1 = raster_to_df(ch1, "hist{}".format(hy))
+        dfh.append(ch1)
+        print("Histo {} dens:".format(hy), ch1.shape)
+
+    # save all
+    aux = pd.merge(aquif_df, pd.concat(dfh, axis=1), left_index=True, right_index=True)
+    aux.index.name = 'cell_id'
+    print("Aquif and Historidcal Densities shape:", aux.shape)
+
+    x = pd.concat([aux, pd.concat(soils, axis=1)], axis=1)
+    x.index.name = "cell_id"
+    x.to_parquet(r"data/within/instruments_lez.pqt")
+
+    print("Saved instruments LEZ with shape {}".format(x.shape))
+
+    print("===== Control variables")
+
+    print("=== 1.1) Terrain variables.")
+
+    # elevation
     dem = rioxarray.open_rasterio(r"data/controls/geographical/elevation/elevationeurope1x1.tif").sel(band=1)
-    dem = dem.rio.reproject_match(cpop).rio.clip(eur.geometry.values)
-    dem.values = dem.values.astype(np.dtype("float32"))
+    dem = dem.rio.write_nodata(255)
+    dem = dem.rio.reproject_match(cpop, nodata=255).rio.clip(eur.geometry.values)
     dem.values[dem.values == dem.rio.nodata] = 0
+    dem.values = dem.values.astype(np.dtype("float32"))
+    dem_df = raster_to_df(dem, "mean_elevation")
+    print("Elevation shape:", dem_df.shape)
 
+    # ruggedness
     @ngjit
     def _calc_ruggedness(array):
         return np.sqrt(np.sum((np.delete(array, 4) - array[1, 1]) ** 2))
@@ -59,299 +153,81 @@ if __name__ == '__main__':
     ruggedness = apply(dem, kernel, _calc_ruggedness, "ruggedness")
     ruggedness = ruggedness.assign_attrs({"_FillValue": 0})
     crug = ruggedness.rio.clip(eur.geometry)
+    crug.values = crug.values.astype(np.dtype("float32"))
+    crug = raster_to_df(crug, "mean_ruggedness")
+    print("Ruggedness shape:", crug.shape)
 
-    print("=== Water and Coast variables")
-    eurp = eur.to_crs(4326)
-    xmin, ymin, xmax, ymax = eurp.total_bounds
-
-    cos = gpd.read_file(r"data/controls/geographical/ne_10m_coastline/ne_10m_coastline.shp")
-    cosp = cos.cx[xmin:xmax, ymin:ymax].to_crs(3035)
-
-    wat = gpd.read_file(r"data/controls/geographical/ne_10m_rivers_europe/ne_10m_rivers_europe.shp")
-    wat = wat.cx[xmin:xmax, ymin:ymax].to_crs(3035)
-
-    cosp["coast"] = 1
-    wat['water'] = 1
-
-    # malla de costas
-    coast_grid = make_geocube(
-        vector_data=cosp,
-        measurements=["coast"],
-        resolution=pol.rio.resolution(),
-        fill=0
-    ).to_array().sel(variable='coast').rio.reproject_match(cpop, nodata=-1)
-
-    # malla de aguas
-    water_grid = make_geocube(
-        vector_data=wat,
-        measurements=["water"],
-        resolution=pol.rio.resolution(),
-        fill=0
-    ).to_array().sel(variable='water').rio.reproject_match(cpop, nodata=-1)
-
-
-    @ngjit
-    def _calc_coast_city(array):
-        return int(np.any(array > 0))
-
-
-    kernel = circle_kernel(1, 1, 50)
-    kernel_river = circle_kernel(1, 1, 10)
-
-    output = apply(coast_grid, kernel, _calc_coast_city, "coast_city")
-    coast = output.rio.clip(eur.geometry)
-
-    output_water = apply(water_grid, kernel_river, _calc_coast_city, "water_city")
-    water = output_water.rio.clip(eur.geometry)
-
-    print("=== Power Plants variables")
     # power plants
+    print("=== 1.2) Power Plants. ")
     pw = pd.read_csv(r"data/controls/powerplants/global_power_plant_database.csv")
     pw = pw[pw.primary_fuel.isin(["Gas", "Oil", "Coal"])]
     pw = pw[['name', 'latitude', 'longitude', 'primary_fuel']]
     geometry = pw.apply(lambda x: Point([x.latitude, x.longitude]), axis=1)
     pw['geometry'] = geometry
     pw = gpd.GeoDataFrame(pw, crs=4326).to_crs(3035)
-    pw = pw.clip(eur)
-    pw["geometry"] = pw.buffer(80000)
     pw['power_plant'] = 1
+    xmin, ymin, xmax, ymax = cities.total_bounds
+    pw = pw.cx[xmin:xmax, ymin:ymax]
+    pw["geometry"] = pw.buffer(80000)
     pwgrid = make_geocube(
         vector_data=pw,
         measurements=["power_plant"],
-        resolution=pol.rio.resolution(),
+        resolution=cpop.rio.resolution(),
         fill=0
-    ).to_array().sel(variable='power_plant').rio.reproject_match(cpop, nodata=-1)
-    pwgrid.values[pwgrid.values == pwgrid.rio.nodata] = 0
+    ).to_array().sel(variable='power_plant').rio.reproject_match(cpop, nodata=0).rio.clip(eur.geometry.values)
+    pw_dist = raster_to_df(pwgrid, "pw_dist")
+    print("PW Distance shape:", pw_dist.shape)
+
+    print("=== 1.3) Water and Coast distance")
+    eurp = eur.to_crs(4326)
+    xmin, ymin, xmax, ymax = eurp.total_bounds
+    cos = gpd.read_file(r"data/controls/geographical/ne_10m_coastline/ne_10m_coastline.shp")
+    cos = cos.cx[xmin:xmax, ymin:ymax].to_crs(3035)
+    wat = gpd.read_file(r"data/controls/geographical/ne_10m_rivers_europe/ne_10m_rivers_europe.shp")
+    wat = wat.cx[xmin:xmax, ymin:ymax].to_crs(3035)
+    # river distance
+    transform = cpop.rio.transform()
+    shape = cpop.rio.shape
+
+    river_mask = rasterize(
+        shapes=[(geom, 1) for geom in wat.geometry],
+        out_shape=shape,
+        transform=transform,
+        fill=0,
+        dtype=np.float32
+    )
+    # river_mask[np.isnan(cpop.values)] = np.nan
+    river_mask_grid = cpop.copy()
+    river_mask_grid.values = river_mask
+    river_mask_grid = river_mask_grid.rio.clip(eur.geometry)
+    river_mask_grid.values = (distance_transform_edt(
+        (~river_mask_grid.astype(bool)).astype(np.uint8)
+    ) * transform[0]) / 1000
+    water_dist = raster_to_df(river_mask_grid, "river_dist")
+    print("River Distance shape:", water_dist.shape)
+
+    coast_mask = rasterize(
+        shapes=[(geom, 1) for geom in cos.geometry],
+        out_shape=shape,
+        transform=transform,
+        fill=0,
+        dtype=np.float32
+    )
+    # river_mask[np.isnan(cpop.values)] = np.nan
+    coast_mask_grid = cpop.copy()
+    coast_mask_grid.values = coast_mask
+    coast_mask_grid = coast_mask_grid.rio.clip(eur.geometry)
+    coast_mask_grid.values = (distance_transform_edt(
+        (~coast_mask_grid.astype(bool)).astype(np.uint8)
+    ) * transform[0]) / 1000
+    coast_dist = raster_to_df(coast_mask_grid, "coast_dist")
+    print("Coast Distance shape:", coast_dist.shape)
 
     # final
-    aux = pd.DataFrame(np.vstack((
-        crug.values.ravel(),
-        dem.values.ravel(),
-        coast.values.ravel(),
-        water.values.ravel(),
-        pwgrid.values.ravel()
-    )).T)
-    aux.columns = ['mean_ruggedness', 'mean_elevation', 'coast_city', 'water_dist', 'pw_dist']  # 'coast_city', 'water_dist',
+    aux = pd.concat([
+        crug, dem_df, coast_dist, water_dist, pw_dist
+    ], axis=1)
+    aux.index.name = 'cell_id'
     aux.to_parquet(r"data/within/static_lez.pqt")
-    print("Saved static LEZ with shape {}".format(aux.shape))
-    print("NANs:")
-    print(aux.isnull().sum(0))
 
-    print("===== Instrument variables")
-    # aquifier
-    aquifv = gpd.read_file(r"data/instruments/aquifers/IHME1500_v12/shp/ihme1500_aquif_ec4060_v12_poly.shp")
-    aquifv = aquifv[aquifv.AQUIF_CODE.isin([1, 2, 3, 4, 5, 6])]
-    aquifv["AQUIF_CODE"] = aquifv["AQUIF_CODE"].astype(int)
-    aquifv = aquifv.to_crs(4326).to_crs(3035)
-
-    aquif = make_geocube(
-        vector_data=aquifv,
-        measurements=["AQUIF_CODE"],
-        resolution=pol.rio.resolution(),
-        fill=0
-    ).to_array().sel(variable='AQUIF_CODE').rio.reproject_match(cpop, nodata=-1)
-    aquif.values[aquif.values == aquif.rio.nodata] = 0
-    aquif = aquif.rio.clip(eur.geometry)
-    aquif.values[aquif.values == aquif.rio.nodata] = 0
-
-    # soil quality
-    n = 1
-    soil1 = rioxarray.open_rasterio(
-        r"https://www.fao.org/fileadmin/user_upload/soils/docs/HWSD/Soil_Quality_data/sq{}.asc".format(n)
-    ).sel(band=1).rio.set_crs(4326).rio.clip(eurproj.geometry).rio.reproject_match(cpop, nodata=-1).rio.clip(
-        eur.geometry)
-    soil1.values[soil1.values == soil1.rio.nodata] = 0
-
-    n = 2
-    soil2 = rioxarray.open_rasterio(
-        r"https://www.fao.org/fileadmin/user_upload/soils/docs/HWSD/Soil_Quality_data/sq{}.asc".format(n)
-    ).sel(band=1).rio.set_crs(4326).rio.clip(eurproj.geometry).rio.reproject_match(cpop, nodata=-1).rio.clip(
-        eur.geometry)
-    soil2.values[soil2.values == soil2.rio.nodata] = 0
-
-    n = 3
-    soil3 = rioxarray.open_rasterio(
-        r"https://www.fao.org/fileadmin/user_upload/soils/docs/HWSD/Soil_Quality_data/sq{}.asc".format(n)
-    ).sel(band=1).rio.set_crs(4326).rio.clip(eurproj.geometry).rio.reproject_match(cpop, nodata=-1).rio.clip(
-        eur.geometry)
-    soil3.values[soil3.values == soil3.rio.nodata] = 0
-
-    n = 4
-    soil4 = rioxarray.open_rasterio(
-        r"https://www.fao.org/fileadmin/user_upload/soils/docs/HWSD/Soil_Quality_data/sq{}.asc".format(n)
-    ).sel(band=1).rio.set_crs(4326).rio.clip(eurproj.geometry).rio.reproject_match(cpop, nodata=-1).rio.clip(
-        eur.geometry)
-    soil4.values[soil4.values == soil4.rio.nodata] = 0
-
-    n = 5
-    soil5 = rioxarray.open_rasterio(
-        r"https://www.fao.org/fileadmin/user_upload/soils/docs/HWSD/Soil_Quality_data/sq{}.asc".format(n)
-    ).sel(band=1).rio.set_crs(4326).rio.clip(eurproj.geometry).rio.reproject_match(cpop, nodata=-1).rio.clip(
-        eur.geometry)
-    soil5.values[soil5.values == soil5.rio.nodata] = 0
-
-    n = 6
-    soil6 = rioxarray.open_rasterio(
-        r"https://www.fao.org/fileadmin/user_upload/soils/docs/HWSD/Soil_Quality_data/sq{}.asc".format(n)
-    ).sel(band=1).rio.set_crs(4326).rio.clip(eurproj.geometry).rio.reproject_match(cpop, nodata=-1).rio.clip(
-        eur.geometry)
-    soil6.values[soil6.values == soil6.rio.nodata] = 0
-
-    n = 7
-    soil7 = rioxarray.open_rasterio(
-        r"https://www.fao.org/fileadmin/user_upload/soils/docs/HWSD/Soil_Quality_data/sq{}.asc".format(n)
-    ).sel(band=1).rio.set_crs(4326).rio.clip(eurproj.geometry).rio.reproject_match(cpop, nodata=-1).rio.clip(
-        eur.geometry)
-    soil7.values[soil7.values == soil7.rio.nodata] = 0
-
-    # historical density
-    hist_years = [1800, 1500, 1000, 100]
-    h = rioxarray.open_rasterio(
-        r"data/instruments/hist_dens/popc_{}AD.asc".format(1800)
-    ).sel(band=1)
-    h.values[h.values < 0] = 0
-    h.rio.write_nodata(0, inplace=True)
-    h.rio.write_crs(4326, inplace=True)
-    ch1 = h.rio.reproject_match(cpop, nodata=-1,
-                                resampling=rasterio.enums.Resampling(1)
-                                ).rio.clip(eur.geometry)
-
-    h = rioxarray.open_rasterio(
-        r"data/instruments/hist_dens/popc_{}AD.asc".format(1500)
-    ).sel(band=1)
-    h.values[h.values < 0] = 0
-    h.rio.write_nodata(0, inplace=True)
-    h.rio.write_crs(4326, inplace=True)
-    ch2 = h.rio.reproject_match(cpop, nodata=-1,
-                                resampling=rasterio.enums.Resampling(1)
-                                ).rio.clip(eur.geometry)
-
-    h = rioxarray.open_rasterio(
-        r"data/instruments/hist_dens/popc_{}AD.asc".format(1000)
-    ).sel(band=1)
-    h.values[h.values < 0] = 0
-    h.rio.write_nodata(0, inplace=True)
-    h.rio.write_crs(4326, inplace=True)
-    ch3 = h.rio.reproject_match(cpop, nodata=-1,
-                                resampling=rasterio.enums.Resampling(1)
-                                ).rio.clip(eur.geometry)
-
-    h = rioxarray.open_rasterio(
-        r"data/instruments/hist_dens/popc_{}AD.asc".format(100)
-    ).sel(band=1)
-    h.values[h.values < 0] = 0
-    h.rio.write_nodata(0, inplace=True)
-    h.rio.write_crs(4326, inplace=True)
-    ch4 = h.rio.reproject_match(cpop, nodata=-1,
-                                resampling=rasterio.enums.Resampling(1)
-                                ).rio.clip(eur.geometry)
-
-    # save all
-    aux = pd.DataFrame(np.vstack((
-        (aquif == 1).astype(int).values.ravel(),
-        (aquif == 2).astype(int).values.ravel(),
-        (aquif == 3).astype(int).values.ravel(),
-        (aquif == 4).astype(int).values.ravel(),
-        (aquif == 5).astype(int).values.ravel(),
-        (aquif == 6).astype(int).values.ravel(),
-        (aquif == 0).astype(int).values.ravel(),
-        ch1.values.ravel(),
-        ch2.values.ravel(),
-        ch3.values.ravel(),
-        ch4.values.ravel()
-    )).T)
-    aux.columns = ['aquif1', 'aquif2', 'aquif3', 'aquif4',
-                   'aquif5', 'aquif6', 'aquif0', 'hist1800',
-                   'hist1500', "hist1000", "hist100"]
-
-    aux2 = pd.DataFrame(np.vstack((
-        (soil1 == 1).astype(int).values.ravel(),
-        (soil1 == 2).astype(int).values.ravel(),
-        (soil1 == 3).astype(int).values.ravel(),
-        (soil1 == 4).astype(int).values.ravel(),
-        (soil1 == 5).astype(int).values.ravel(),
-        (soil1 == 6).astype(int).values.ravel(),
-        (soil1 == 7).astype(int).values.ravel(),
-    )).T)
-    aux2.columns = ['nutrient_av_1', 'nutrient_av_2', 'nutrient_av_3', 'nutrient_av_4',
-                    'nutrient_av_5', 'nutrient_av_6', 'nutrient_av_7']
-
-    aux3 = pd.DataFrame(np.vstack((
-        (soil2 == 1).astype(int).values.ravel(),
-        (soil2 == 2).astype(int).values.ravel(),
-        (soil2 == 3).astype(int).values.ravel(),
-        (soil2 == 4).astype(int).values.ravel(),
-        (soil2 == 5).astype(int).values.ravel(),
-        (soil2 == 6).astype(int).values.ravel(),
-        (soil2 == 7).astype(int).values.ravel(),
-    )).T)
-    aux3.columns = ['nutrient_ret_1', 'nutrient_ret_2', 'nutrient_ret_3', 'nutrient_ret_4',
-                    'nutrient_ret_5', 'nutrient_ret_6', 'nutrient_ret_7']
-
-    aux4 = pd.DataFrame(np.vstack((
-        (soil3 == 1).astype(int).values.ravel(),
-        (soil3 == 2).astype(int).values.ravel(),
-        (soil3 == 3).astype(int).values.ravel(),
-        (soil3 == 4).astype(int).values.ravel(),
-        (soil3 == 5).astype(int).values.ravel(),
-        (soil3 == 6).astype(int).values.ravel(),
-        (soil3 == 7).astype(int).values.ravel(),
-    )).T)
-    aux4.columns = ['nutrient_root_1', 'nutrient_root_2', 'nutrient_root_3', 'nutrient_root_4',
-                    'nutrient_root_5', 'nutrient_root_6', 'nutrient_root_7']
-
-    aux5 = pd.DataFrame(np.vstack((
-        (soil4 == 1).astype(int).values.ravel(),
-        (soil4 == 2).astype(int).values.ravel(),
-        (soil4 == 3).astype(int).values.ravel(),
-        (soil4 == 4).astype(int).values.ravel(),
-        (soil4 == 5).astype(int).values.ravel(),
-        (soil4 == 6).astype(int).values.ravel(),
-        (soil4 == 7).astype(int).values.ravel(),
-    )).T)
-    aux5.columns = ['nutrient_ox_1', 'nutrient_ox_2', 'nutrient_ox_3', 'nutrient_ox_4',
-                    'nutrient_ox_5', 'nutrient_ox_6', 'nutrient_ox_7']
-
-    aux6 = pd.DataFrame(np.vstack((
-        (soil5 == 1).astype(int).values.ravel(),
-        (soil5 == 2).astype(int).values.ravel(),
-        (soil5 == 3).astype(int).values.ravel(),
-        (soil5 == 4).astype(int).values.ravel(),
-        (soil5 == 5).astype(int).values.ravel(),
-        (soil5 == 6).astype(int).values.ravel(),
-        (soil5 == 7).astype(int).values.ravel(),
-    )).T)
-    aux6.columns = ['nutrient_sa_1', 'nutrient_sa_2', 'nutrient_sa_3', 'nutrient_sa_4',
-                    'nutrient_sa_5', 'nutrient_sa_6', 'nutrient_sa_7']
-
-    aux7 = pd.DataFrame(np.vstack((
-        (soil6 == 1).astype(int).values.ravel(),
-        (soil6 == 2).astype(int).values.ravel(),
-        (soil6 == 3).astype(int).values.ravel(),
-        (soil6 == 4).astype(int).values.ravel(),
-        (soil6 == 5).astype(int).values.ravel(),
-        (soil6 == 6).astype(int).values.ravel(),
-        (soil6 == 7).astype(int).values.ravel(),
-    )).T)
-    aux7.columns = ['nutrient_tox_1', 'nutrient_tox_2', 'nutrient_tox_3', 'nutrient_tox_4',
-                    'nutrient_tox_5', 'nutrient_tox_6', 'nutrient_tox_7']
-
-    aux8 = pd.DataFrame(np.vstack((
-        (soil7 == 1).astype(int).values.ravel(),
-        (soil7 == 2).astype(int).values.ravel(),
-        (soil7 == 3).astype(int).values.ravel(),
-        (soil7 == 4).astype(int).values.ravel(),
-        (soil7 == 5).astype(int).values.ravel(),
-        (soil7 == 6).astype(int).values.ravel(),
-        (soil7 == 7).astype(int).values.ravel(),
-    )).T)
-    aux8.columns = ['nutrient_work_1', 'nutrient_work_2', 'nutrient_work_3', 'nutrient_work_4',
-                    'nutrient_work_5', 'nutrient_work_6', 'nutrient_work_7']
-
-    x = pd.concat([aux, aux2, aux3, aux4, aux5, aux6, aux7, aux8], axis=1)
-
-    x.to_parquet(r"data/within/instruments_lez.pqt")
-    print("Saved instruments LEZ with shape {}".format(x.shape))
-    print("NANs:")
-    print(x.isnull().sum(0))
-
+    print("Saved Time Invariante Covariates with shape {}".format(aux.shape))

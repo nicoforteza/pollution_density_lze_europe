@@ -5,7 +5,7 @@ from expden import experienced_density
 
 eur = get_europe()
 eurproj = eur.to_crs(4326)
-years = range(2007, 2022)
+years = range(2022, 2023)
 save_path = r"data/between/{}"
 
 

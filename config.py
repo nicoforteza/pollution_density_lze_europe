@@ -32,12 +32,12 @@ def do_europe():
 
 
 def get_europe():
-    return gpd.read_file(r"data/cities/europe.geojson")
+    return gpd.read_file(r"data/cities/europe.geojson", engine='pyogrio')
 
 
 def get_cities(year):
     year = get_prior_year(2020)
-    return gpd.read_file(r"data/cities/{}/clean/cities.geojson".format(year))
+    return gpd.read_file(r"data/cities/{}/clean/cities.geojson".format(year), engine='pyogrio')
 
 
 def get_prior_year(year):

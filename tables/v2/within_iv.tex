@@ -1,36 +1,36 @@
 
 \begin{table}[htbp]
-   \caption{Within Cities PM2.5 Exposure IV Estimates with Population Counts}
+   \caption{Within Cities PM2.5 Exposure IV Estimates}
    \centering
    \small
-   \begin{tabular}{lccc}
+   \begin{tabular}{lcccccc}
       \tabularnewline \midrule \midrule
-      Model:                          & (1)           & (2)           & (3)\\  
+      is\_city                        & Full sample   & 1             & Full sample   & 1             & Full sample   & 1 \\   
+      Model:                          & (1)           & (2)           & (3)           & (4)           & (5)           & (6)\\  
       \midrule
       \emph{Variables}\\
-      log\_pop\_ras                   & 0.344$^{***}$ & 0.153$^{***}$ & 0.579$^{***}$\\   
-                                      & (0.021)       & (0.005)       & (0.028)\\   
-      Weather                         & Yes           & Yes           & Yes\\  
-      Geological                      & Yes           & Yes           & Yes\\  
-      Water                           & Yes           & Yes           & Yes\\  
-      Power Plants                    & Yes           & Yes           & Yes\\  
+      log\_pop\_ras                   & 0.089$^{***}$ & 0.071$^{***}$ & 0.076$^{***}$ & 0.066$^{***}$ & 0.199$^{***}$ & 0.046$^{***}$\\   
+                                      & (0.002)       & (0.005)       & (0.001)       & (0.006)       & (0.004)       & (0.009)\\   
+      Weather                         &               &               &               &               &               & \\  
+      Geological                      & Yes           & Yes           & Yes           & Yes           & Yes           & Yes\\  
+      Water                           & Yes           & Yes           & Yes           & Yes           & Yes           & Yes\\  
+      Power Plants                    & Yes           & Yes           & Yes           & Yes           & Yes           & Yes\\  
       \midrule
       \emph{Fixed-effects}\\
-      country-year, country and year  & Yes           & Yes           & Yes\\  
+      country\_id and year            & Yes           & Yes           & Yes           & Yes           & Yes           & Yes\\  
       \midrule
       \emph{Fit statistics}\\
-      Observations                    & 47,851,465    & 47,851,465    & 47,851,465\\  
-      R$^2$                           & -0.762        & 0.225         & -3.42\\  
-      F-test (1st stage), log_pop_ras & 22,423.2      & 835,332.9     & 136,782.9\\  
-      Wu-Hausman                      & 180,780.0     & 496,197.7     & 5,024,779.0\\  
-      Sargan                          & 239,050.1     & 207,875.3     & 301,652.6\\  
+      Observations                    & 18,417,179    & 1,091,775     & 18,417,179    & 1,091,775     & 18,417,179    & 1,091,775\\  
+      F-test (1st stage), log_pop_ras & 42,961.9      & 2,156.9       & 2,841,968.7   & 67,569.6      & 58,355.6      & 1,371.2\\  
+      Wu-Hausman                      & 205,951.9     & 14,653.1      & 235,002.2     & 11,968.9      & 711,530.6     & 445.5\\  
+      Sargan                          & 517,836.8     & 18,933.4      &               &               & 49,889.3      & 15,183.9\\  
       \midrule \midrule
-      \multicolumn{4}{l}{\emph{Clustered (country-year) standard-errors in parentheses}}\\
-      \multicolumn{4}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
+      \multicolumn{7}{l}{\emph{Conley (3km) standard-errors in parentheses}}\\
+      \multicolumn{7}{l}{\emph{Signif. Codes: ***: 0.01, **: 0.05, *: 0.1}}\\
    \end{tabular}
    
    \par \raggedright 
-   Fixed Effects: Country-year, country and year
+   Fixed Effects: country and year.
 \end{table}
 
 
